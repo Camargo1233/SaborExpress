@@ -1,0 +1,32 @@
+{
+  "name": "saborexpress-backend",
+  "version": "2.0.0",
+  "description": "API REST do SaborExpress - restaurante multi-tenant (salao, delivery e retirada)",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "db:migrate": "node scripts/migrate.js",
+    "db:reset": "node scripts/migrate.js --reset",
+    "test": "node --test tests/*.test.js"
+  },
+  "keywords": ["restaurante", "api", "express", "postgresql"],
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "pg": "^8.13.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7",
+    "supertest": "^7.0.0"
+  }
+}
