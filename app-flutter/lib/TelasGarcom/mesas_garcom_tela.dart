@@ -334,18 +334,23 @@ class _MesasGarcomTelaState extends State<MesasGarcomTela> {
       backgroundColor: Colors.white,
 
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         backgroundColor: Colors.green,
         centerTitle: true,
+
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          tooltip: "Sair",
+          icon: const Icon(Icons.logout, color: Colors.white),
           onPressed: () {
-            Navigator.pop(context);
+            Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
           },
         ),
+
         title: const Text(
           "Mesas",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
+
         actions: [
           IconButton(
             onPressed: carregarMesas,

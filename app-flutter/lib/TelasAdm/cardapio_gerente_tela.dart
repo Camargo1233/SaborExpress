@@ -1,8 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../Repositories/produto_repository.dart';
 import '../models/produto.dart';
-
 import 'produto_gerente_tela.dart';
 import 'adicionar_gerente_tela.dart';
 
@@ -17,24 +18,17 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
   final ProdutoRepository repository = ProdutoRepository();
 
   int categoriaSelecionada = 0;
-
   bool carregando = true;
   String? erro;
-
   List<Produto> produtos = [];
 
-  // Categorias existentes atualmente no PostgreSQL
-  final categorias = ["Pizzas", "Lanches", "Massas", "Bebidas", "Sobremesas"];
+  final categorias = ['Pizzas', 'Lanches', 'Massas', 'Bebidas', 'Sobremesas'];
 
   @override
   void initState() {
     super.initState();
     carregarProdutos();
   }
-
-  // ============================================================
-  // CARREGAR PRODUTOS DO BANCO
-  // ============================================================
 
   Future<void> carregarProdutos() async {
     if (mounted) {
@@ -46,7 +40,6 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
 
     try {
       final lista = await repository.listarProdutos();
-
       if (!mounted) return;
 
       setState(() {
@@ -63,9 +56,21 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
     }
   }
 
-  // ============================================================
-  // ADICIONAR PRODUTO
-  // ============================================================
+  Future<String?> _enviarImagemSeNecessario(Map<String, dynamic> dados) async {
+    final bytes = dados['imagemBytes'];
+
+    if (bytes is Uint8List && bytes.isNotEmpty) {
+      final nomeArquivo =
+          dados['imagemNome']?.toString().trim() ?? 'produto.jpg';
+
+      return repository.uploadImagem(
+        imagemBytes: bytes,
+        nomeArquivo: nomeArquivo.isEmpty ? 'produto.jpg' : nomeArquivo,
+      );
+    }
+
+    return _buscarImagem(dados);
+  }
 
   Future<void> abrirAdicionar() async {
     final resultado = await Navigator.push(
@@ -73,47 +78,40 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
       MaterialPageRoute(builder: (_) => const AdicionarGerenteTela()),
     );
 
-    if (resultado == null) {
-      return;
-    }
+    if (resultado == null) return;
 
     try {
       final dados = Map<String, dynamic>.from(resultado);
 
-      final nome = dados["nome"]?.toString().trim() ?? "";
-
-      final descricao = dados["descricao"]?.toString().trim() ?? "";
-
-      final preco = dados["preco"] is num
-          ? (dados["preco"] as num).toDouble()
+      final nome = dados['nome']?.toString().trim() ?? '';
+      final descricao = dados['descricao']?.toString().trim() ?? '';
+      final preco = dados['preco'] is num
+          ? (dados['preco'] as num).toDouble()
           : double.tryParse(
-                  dados["preco"]?.toString().replaceAll(",", ".") ?? "",
+                  dados['preco']?.toString().replaceAll(',', '.') ?? '',
                 ) ??
                 0.0;
 
-      final categoriaId = dados["categoriaId"]?.toString();
+      final categoriaId = dados['categoriaId']?.toString();
 
       if (nome.isEmpty || preco <= 0) {
-        _mostrarMensagem("Informe um nome e um preço válido.", erro: true);
+        _mostrarMensagem('Informe um nome e um preço válido.', erro: true);
         return;
       }
 
       if (categoriaId == null || categoriaId.isEmpty) {
-        _mostrarMensagem("Selecione uma categoria.", erro: true);
+        _mostrarMensagem('Selecione uma categoria.', erro: true);
         return;
       }
+
+      final imagemUrl = await _enviarImagemSeNecessario(dados);
 
       await repository.criarProduto(
         nome: nome,
         descricao: descricao,
         preco: preco,
-
-        // UUID da categoria selecionada
         categoriaId: categoriaId,
-
-        // Só será enviado se houver uma URL válida
-        imagemUrl: _buscarImagem(dados),
-
+        imagemUrl: imagemUrl,
         tempoPreparoMin: 0,
         destaque: false,
         disponivel: true,
@@ -121,32 +119,26 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
 
       if (!mounted) return;
 
-      _mostrarMensagem("Produto adicionado com sucesso!");
-
+      _mostrarMensagem('Produto adicionado com sucesso!');
       await carregarProdutos();
     } catch (e) {
       if (!mounted) return;
-
       _mostrarMensagem(_limparErro(e), erro: true);
     }
   }
 
-  // ============================================================
-  // EDITAR PRODUTO
-  // ============================================================
-
   Future<void> abrirEditar(Produto produto) async {
     final produtoMap = <String, dynamic>{
-      "id": produto.id,
-      "nome": produto.nome,
-      "descricao": produto.descricao,
-      "preco": produto.preco,
-      "categoria": produto.categoria,
-      "categoriaId": produto.categoriaId,
-      "imagem": produto.imagem,
-      "destaque": produto.destaque,
-      "disponivel": produto.disponivel,
-      "tempoPreparoMin": produto.tempoPreparoMin,
+      'id': produto.id,
+      'nome': produto.nome,
+      'descricao': produto.descricao,
+      'preco': produto.preco,
+      'categoria': produto.categoria,
+      'categoriaId': produto.categoriaId,
+      'imagem': produto.imagem,
+      'destaque': produto.destaque,
+      'disponivel': produto.disponivel,
+      'tempoPreparoMin': produto.tempoPreparoMin,
     };
 
     final resultado = await Navigator.push(
@@ -156,33 +148,33 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
       ),
     );
 
-    if (resultado == null) {
-      return;
-    }
+    if (resultado == null) return;
 
     try {
       final dados = Map<String, dynamic>.from(resultado);
 
-      final nome = dados["nome"]?.toString().trim() ?? "";
-
-      final descricao = dados["descricao"]?.toString().trim() ?? "";
-
-      final preco = dados["preco"] is num
-          ? (dados["preco"] as num).toDouble()
+      final nome = dados['nome']?.toString().trim() ?? '';
+      final descricao = dados['descricao']?.toString().trim() ?? '';
+      final preco = dados['preco'] is num
+          ? (dados['preco'] as num).toDouble()
           : double.tryParse(
-                  dados["preco"]?.toString().replaceAll(",", ".") ?? "",
+                  dados['preco']?.toString().replaceAll(',', '.') ?? '',
                 ) ??
                 0.0;
 
       if (nome.isEmpty || preco <= 0) {
-        _mostrarMensagem("Informe um nome e um preço válido.", erro: true);
+        _mostrarMensagem('Informe um nome e um preço válido.', erro: true);
         return;
       }
 
-      // Se a tela de edição devolver uma nova categoria,
-      // usamos ela. Caso contrário, preservamos a atual.
       final categoriaId =
-          dados["categoriaId"]?.toString() ?? produto.categoriaId;
+          dados['categoriaId']?.toString() ?? produto.categoriaId;
+
+      final novaImagemUrl = await _enviarImagemSeNecessario(dados);
+
+      final imagemUrl =
+          novaImagemUrl ??
+          (produto.imagem.trim().isNotEmpty ? produto.imagem.trim() : null);
 
       await repository.atualizarProduto(
         produtoId: produto.id,
@@ -190,98 +182,74 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
         descricao: descricao,
         preco: preco,
         categoriaId: categoriaId,
-        imagemUrl:
-            _buscarImagem(dados) ??
-            (produto.imagem.isNotEmpty ? produto.imagem : null),
-        tempoPreparoMin: produto.tempoPreparoMin,
-        destaque: dados["destaque"] is bool
-            ? dados["destaque"]
+        imagemUrl: imagemUrl,
+        tempoPreparoMin: dados['tempoPreparoMin'] is num
+            ? (dados['tempoPreparoMin'] as num).toInt()
+            : produto.tempoPreparoMin,
+        destaque: dados['destaque'] is bool
+            ? dados['destaque'] as bool
             : produto.destaque,
-        disponivel: dados["disponivel"] is bool
-            ? dados["disponivel"]
+        disponivel: dados['disponivel'] is bool
+            ? dados['disponivel'] as bool
             : produto.disponivel,
       );
 
       if (!mounted) return;
 
-      _mostrarMensagem("Produto atualizado com sucesso!");
-
+      _mostrarMensagem('Produto atualizado com sucesso!');
       await carregarProdutos();
     } catch (e) {
       if (!mounted) return;
-
       _mostrarMensagem(_limparErro(e), erro: true);
     }
   }
-
-  // ============================================================
-  // REMOVER PRODUTO
-  // ============================================================
 
   Future<void> removerProduto(Produto produto) async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text("Remover produto"),
+          title: const Text('Remover produto'),
           content: Text('Deseja realmente remover "${produto.nome}"?'),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(context, false);
-              },
-              child: const Text("Cancelar"),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
             ),
             TextButton(
-              onPressed: () {
-                Navigator.pop(context, true);
-              },
-              child: const Text("Remover", style: TextStyle(color: Colors.red)),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Remover', style: TextStyle(color: Colors.red)),
             ),
           ],
         );
       },
     );
 
-    if (confirmar != true) {
-      return;
-    }
+    if (confirmar != true) return;
 
     try {
       await repository.excluirProduto(produto.id);
 
       if (!mounted) return;
 
-      _mostrarMensagem("Produto removido com sucesso!");
-
+      _mostrarMensagem('Produto removido com sucesso!');
       await carregarProdutos();
     } catch (e) {
       if (!mounted) return;
-
       _mostrarMensagem(_limparErro(e), erro: true);
     }
   }
 
-  // ============================================================
-  // AUXILIARES
-  // ============================================================
-
   String? _buscarImagem(Map<String, dynamic> dados) {
-    final imagem = dados["imagemUrl"] ?? dados["imagem_url"] ?? dados["imagem"];
+    final imagem = dados['imagemUrl'] ?? dados['imagem_url'] ?? dados['imagem'];
 
-    if (imagem == null) {
-      return null;
-    }
+    if (imagem == null) return null;
 
     final valor = imagem.toString().trim();
 
-    if (valor.isEmpty) {
-      return null;
-    }
+    if (valor.isEmpty) return null;
 
-    // O backend exige URL.
-    // Caminho local do Windows não pode ser enviado.
-    if (!valor.startsWith("http://") && !valor.startsWith("https://")) {
+    if (!valor.startsWith('http://') && !valor.startsWith('https://')) {
       return null;
     }
 
@@ -289,7 +257,7 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
   }
 
   String _limparErro(Object erro) {
-    return erro.toString().replaceFirst("Exception: ", "");
+    return erro.toString().replaceFirst('Exception: ', '');
   }
 
   void _mostrarMensagem(String mensagem, {bool erro = false}) {
@@ -303,9 +271,40 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
     );
   }
 
-  // ============================================================
-  // BUILD
-  // ============================================================
+  Widget _imagemProduto(Produto produto) {
+    final imagem = produto.imagem.trim();
+
+    if (imagem.isEmpty ||
+        (!imagem.startsWith('http://') && !imagem.startsWith('https://'))) {
+      return Container(
+        width: 70,
+        height: 70,
+        decoration: BoxDecoration(
+          color: Colors.green.shade100,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.fastfood, color: Colors.green, size: 32),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.network(
+        imagem,
+        width: 70,
+        height: 70,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            width: 70,
+            height: 70,
+            color: Colors.green.shade100,
+            child: const Icon(Icons.broken_image_outlined, color: Colors.green),
+          );
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -318,81 +317,69 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-
       drawer: Drawer(
         child: Column(
           children: [
             const UserAccountsDrawerHeader(
               decoration: BoxDecoration(color: Colors.green),
-              accountName: Text("Gerente"),
-              accountEmail: Text("gerente@saborexpress.com"),
+              accountName: Text('Gerente'),
+              accountEmail: Text('gerente@saborexpress.com'),
               currentAccountPicture: CircleAvatar(
                 backgroundColor: Colors.white,
                 child: Icon(Icons.person, color: Colors.green),
               ),
             ),
-
             ListTile(
               leading: const Icon(Icons.add_circle, color: Colors.green),
-              title: const Text("Adicionar produto"),
+              title: const Text('Adicionar produto'),
               onTap: () {
                 Navigator.pop(context);
                 abrirAdicionar();
               },
             ),
-
             ListTile(
               leading: const Icon(Icons.receipt_long, color: Colors.green),
-              title: const Text("Pedidos"),
+              title: const Text('Pedidos'),
               onTap: () {
-                Navigator.pushNamed(context, "/adm/pedidos");
+                Navigator.pushNamed(context, '/adm/pedidos');
               },
             ),
           ],
         ),
       ),
-
       appBar: AppBar(
         backgroundColor: Colors.green,
         centerTitle: true,
-
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          onPressed: () => Navigator.pop(context),
         ),
-
         title: const Text(
-          "Cardápio",
+          'Cardápio',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
-            tooltip: "Atualizar",
+            tooltip: 'Atualizar',
             onPressed: carregarProdutos,
           ),
           IconButton(
             icon: const Icon(Icons.add_circle, color: Colors.white),
-            tooltip: "Adicionar produto",
+            tooltip: 'Adicionar produto',
             onPressed: abrirAdicionar,
           ),
         ],
       ),
-
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Colors.green,
         onPressed: abrirAdicionar,
         icon: const Icon(Icons.add),
-        label: const Text("Adicionar Produto"),
+        label: const Text('Adicionar Produto'),
       ),
-
       body: Column(
         children: [
           const SizedBox(height: 10),
-
           SizedBox(
             height: 45,
             child: ListView.builder(
@@ -431,18 +418,12 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
               },
             ),
           ),
-
           const Divider(),
-
           Expanded(child: _construirConteudo(produtosCategoria)),
         ],
       ),
     );
   }
-
-  // ============================================================
-  // CONTEÚDO
-  // ============================================================
 
   Widget _construirConteudo(List<Produto> produtosCategoria) {
     if (carregando) {
@@ -459,17 +440,13 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(Icons.error_outline, color: Colors.red, size: 50),
-
               const SizedBox(height: 12),
-
               Text(erro!, textAlign: TextAlign.center),
-
               const SizedBox(height: 16),
-
               ElevatedButton.icon(
                 onPressed: carregarProdutos,
                 icon: const Icon(Icons.refresh),
-                label: const Text("Tentar novamente"),
+                label: const Text('Tentar novamente'),
               ),
             ],
           ),
@@ -480,7 +457,7 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
     if (produtosCategoria.isEmpty) {
       return Center(
         child: Text(
-          "Nenhum produto em ${categorias[categoriaSelecionada]}",
+          'Nenhum produto em ${categorias[categoriaSelecionada]}',
           style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
         ),
       );
@@ -488,33 +465,21 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
 
     return RefreshIndicator(
       onRefresh: carregarProdutos,
-
       child: ListView.builder(
         padding: const EdgeInsets.all(12),
-
         itemCount: produtosCategoria.length,
-
         itemBuilder: (context, index) {
           final produto = produtosCategoria[index];
 
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
-
             elevation: 3,
-
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
             ),
-
             child: ListTile(
               contentPadding: const EdgeInsets.all(12),
-
-              leading: CircleAvatar(
-                radius: 28,
-                backgroundColor: Colors.green.shade100,
-                child: const Icon(Icons.fastfood, color: Colors.green),
-              ),
-
+              leading: _imagemProduto(produto),
               title: Text(
                 produto.nome,
                 style: const TextStyle(
@@ -523,18 +488,15 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
                   color: Colors.green,
                 ),
               ),
-
               subtitle: Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(produto.descricao),
-
                     const SizedBox(height: 6),
-
                     Text(
-                      "R\$ ${produto.preco.toStringAsFixed(2)}",
+                      'R\$ ${produto.preco.toStringAsFixed(2)}',
                       style: const TextStyle(
                         color: Colors.green,
                         fontWeight: FontWeight.bold,
@@ -544,37 +506,34 @@ class _CardapioGerenteTelaState extends State<CardapioGerenteTela> {
                   ],
                 ),
               ),
-
               trailing: PopupMenuButton<String>(
                 onSelected: (valor) {
-                  if (valor == "editar") {
+                  if (valor == 'editar') {
                     abrirEditar(produto);
                   }
 
-                  if (valor == "remover") {
+                  if (valor == 'remover') {
                     removerProduto(produto);
                   }
                 },
-
                 itemBuilder: (context) => const [
                   PopupMenuItem(
-                    value: "editar",
+                    value: 'editar',
                     child: Row(
                       children: [
                         Icon(Icons.edit, color: Colors.green),
                         SizedBox(width: 10),
-                        Text("Editar"),
+                        Text('Editar'),
                       ],
                     ),
                   ),
-
                   PopupMenuItem(
-                    value: "remover",
+                    value: 'remover',
                     child: Row(
                       children: [
                         Icon(Icons.delete, color: Colors.red),
                         SizedBox(width: 10),
-                        Text("Remover"),
+                        Text('Remover'),
                       ],
                     ),
                   ),

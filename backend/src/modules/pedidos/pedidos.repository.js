@@ -56,9 +56,11 @@ async function listarItens(pedidoId) {
             observacao, status, motivo_cancelamento, criado_em
        from pedido_itens
       where pedido_id = $1
+        and status <> 'cancelado'
       order by criado_em`,
     [pedidoId]
   );
+
   return rows;
 }
 

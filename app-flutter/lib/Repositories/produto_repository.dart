@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -36,10 +37,30 @@ class ProdutoRepository {
         }
       }
     } catch (_) {
-      // Caso o backend não retorne JSON.
+      // Backend não retornou JSON.
     }
 
     return 'Erro ${response.statusCode}';
+  }
+
+  String _mensagemErroTexto({required int statusCode, required String body}) {
+    try {
+      final dados = jsonDecode(body);
+
+      if (dados is Map<String, dynamic>) {
+        if (dados['erro'] != null) {
+          return dados['erro'].toString();
+        }
+
+        if (dados['message'] != null) {
+          return dados['message'].toString();
+        }
+      }
+    } catch (_) {
+      // Backend não retornou JSON.
+    }
+
+    return 'Erro $statusCode';
   }
 
   // ============================================================
@@ -74,6 +95,87 @@ class ProdutoRepository {
       throw Exception(_mensagemErro(response));
     } catch (erro) {
       throw Exception('Não foi possível buscar os produtos: $erro');
+    }
+  }
+
+  // ============================================================
+  // UPLOAD DE IMAGEM
+  // ============================================================
+  //
+  // Funciona com Flutter Web porque não utiliza dart:io nem File.
+  //
+  // Recebe os bytes vindos do ImagePicker e envia:
+  //
+  // multipart/form-data
+  // campo: imagem
+  //
+  // para:
+  //
+  // POST /produtos/upload-imagem
+  //
+  // O backend responde:
+  //
+  // {
+  //   "imagemUrl": "http://localhost:3000/uploads/produtos/..."
+  // }
+  // ============================================================
+
+  Future<String> uploadImagem({
+    required Uint8List imagemBytes,
+    required String nomeArquivo,
+  }) async {
+    final token = await _buscarToken();
+
+    if (token == null || token.isEmpty) {
+      throw Exception('Sessão não encontrada. Faça login novamente.');
+    }
+
+    if (imagemBytes.isEmpty) {
+      throw Exception('A imagem selecionada está vazia.');
+    }
+
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/upload-imagem'),
+      );
+
+      request.headers['Authorization'] = 'Bearer $token';
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'imagem',
+          imagemBytes,
+          filename: nomeArquivo.isNotEmpty ? nomeArquivo : 'produto.jpg',
+        ),
+      );
+
+      final streamedResponse = await request.send();
+
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final dynamic dados = jsonDecode(response.body);
+
+        if (dados is Map<String, dynamic>) {
+          final imagemUrl = dados['imagemUrl']?.toString();
+
+          if (imagemUrl != null && imagemUrl.trim().isNotEmpty) {
+            return imagemUrl.trim();
+          }
+        }
+
+        throw Exception('O backend não retornou a URL da imagem.');
+      }
+
+      throw Exception(
+        _mensagemErroTexto(
+          statusCode: response.statusCode,
+          body: response.body,
+        ),
+      );
+    } catch (erro) {
+      throw Exception('Não foi possível enviar a imagem: $erro');
     }
   }
 
@@ -130,7 +232,8 @@ class ProdutoRepository {
     }
 
     throw Exception(
-      'Não foi possível criar o produto: ${_mensagemErro(response)}',
+      'Não foi possível criar o produto: '
+      '${_mensagemErro(response)}',
     );
   }
 
@@ -197,7 +300,8 @@ class ProdutoRepository {
     }
 
     throw Exception(
-      'Não foi possível atualizar o produto: ${_mensagemErro(response)}',
+      'Não foi possível atualizar o produto: '
+      '${_mensagemErro(response)}',
     );
   }
 
@@ -225,7 +329,8 @@ class ProdutoRepository {
     }
 
     throw Exception(
-      'Não foi possível excluir o produto: ${_mensagemErro(response)}',
+      'Não foi possível excluir o produto: '
+      '${_mensagemErro(response)}',
     );
   }
 }

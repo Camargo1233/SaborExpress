@@ -17,25 +17,20 @@ class ProdutoTela extends StatefulWidget {
 class _ProdutoTelaState extends State<ProdutoTela> {
   int quantidade = 1;
 
-  final observacaoController = TextEditingController();
-
-  final carrinhoRepository = CarrinhoRepository.instance;
+  final CarrinhoRepository carrinhoRepository = CarrinhoRepository.instance;
 
   double get valorTotal {
     return widget.produto.preco * quantidade;
   }
 
-  @override
-  void dispose() {
-    observacaoController.dispose();
-    super.dispose();
-  }
+  // =============================================================
+  // ADICIONAR AO CARRINHO
+  // =============================================================
 
   void adicionarAoCarrinho() {
     carrinhoRepository.adicionarProduto(
       produto: widget.produto,
       quantidade: quantidade,
-      observacao: observacaoController.text.trim(),
     );
 
     Navigator.pushNamed(context, '/cliente/carrinho');
@@ -46,6 +41,9 @@ class _ProdutoTelaState extends State<ProdutoTela> {
     return Scaffold(
       body: Stack(
         children: [
+          // =====================================================
+          // IMAGEM DO PRODUTO
+          // =====================================================
           SizedBox(
             height: 360,
             width: double.infinity,
@@ -90,8 +88,8 @@ class _ProdutoTelaState extends State<ProdutoTela> {
             alignment: Alignment.bottomCenter,
             child: Container(
               constraints: BoxConstraints(
-                minHeight: MediaQuery.of(context).size.height * .58,
-                maxHeight: MediaQuery.of(context).size.height * .68,
+                minHeight: MediaQuery.of(context).size.height * .45,
+                maxHeight: MediaQuery.of(context).size.height * .58,
               ),
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
               decoration: const BoxDecoration(
@@ -101,6 +99,9 @@ class _ProdutoTelaState extends State<ProdutoTela> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // =============================================
+                  // NOME
+                  // =============================================
                   Text(
                     widget.produto.nome,
                     style: const TextStyle(
@@ -112,6 +113,9 @@ class _ProdutoTelaState extends State<ProdutoTela> {
 
                   const SizedBox(height: 8),
 
+                  // =============================================
+                  // DESCRIÇÃO
+                  // =============================================
                   Text(
                     widget.produto.descricao,
                     style: const TextStyle(
@@ -121,11 +125,11 @@ class _ProdutoTelaState extends State<ProdutoTela> {
                     ),
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 28),
 
-                  // =================================================
+                  // =============================================
                   // QUANTIDADE E VALOR
-                  // =================================================
+                  // =============================================
                   Row(
                     children: [
                       _QuantidadeButton(
@@ -173,31 +177,11 @@ class _ProdutoTelaState extends State<ProdutoTela> {
                     ],
                   ),
 
-                  const SizedBox(height: 20),
-
-                  // =================================================
-                  // OBSERVAÇÃO
-                  // =================================================
-                  const Text(
-                    'Observações',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  TextField(
-                    controller: observacaoController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      hintText: 'Ex: sem cebola, molho à parte...',
-                    ),
-                  ),
-
                   const Spacer(),
 
-                  // =================================================
+                  // =============================================
                   // ADICIONAR AO CARRINHO
-                  // =================================================
+                  // =============================================
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(

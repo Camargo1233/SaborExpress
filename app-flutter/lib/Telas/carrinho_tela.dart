@@ -24,11 +24,19 @@ class _CarrinhoTelaState extends State<CarrinhoTela> {
 
   double get subtotal => carrinho.subtotal;
 
+  // =============================================================
+  // AUMENTAR QUANTIDADE
+  // =============================================================
+
   void _aumentarQuantidade(int index) {
     setState(() {
       carrinho.aumentarQuantidade(index);
     });
   }
+
+  // =============================================================
+  // DIMINUIR QUANTIDADE
+  // =============================================================
 
   void _diminuirQuantidade(int index) {
     setState(() {
@@ -36,21 +44,55 @@ class _CarrinhoTelaState extends State<CarrinhoTela> {
     });
   }
 
+  // =============================================================
+  // LIMPAR CARRINHO
+  // =============================================================
+
   void _limparCarrinho() {
     setState(() {
       carrinho.limpar();
     });
   }
 
+  // =============================================================
+  // CONTINUAR COMPRANDO
+  // =============================================================
+
   void _continuarComprando() {
     // Volta para a Home/Cardápio sem apagar o carrinho.
     Navigator.popUntil(context, ModalRoute.withName('/cliente/home'));
   }
 
+  // =============================================================
+  // IR PARA SACOLA
+  // =============================================================
+
   void _irParaSacola() {
     if (carrinho.vazio) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Adicione pelo menos um produto antes de continuar.'),
+        ),
+      );
+
       return;
     }
+
+    // -----------------------------------------------------------
+    // Converte os produtos do carrinho em dados que poderão ser
+    // utilizados pela Sacola para criar o pedido no backend.
+    // -----------------------------------------------------------
+
+    final itensPedido = itens.map((item) {
+      return <String, dynamic>{
+        'produtoId': item.produto.id.toString(),
+        'nome': item.produto.nome,
+        'preco': item.produto.preco,
+        'quantidade': item.quantidade,
+        'observacao': item.observacao,
+        'total': item.total,
+      };
+    }).toList();
 
     Navigator.pushNamed(
       context,
@@ -59,9 +101,16 @@ class _CarrinhoTelaState extends State<CarrinhoTela> {
         'subtotal': subtotal,
         'entrega': entrega,
         'quantidade': quantidadeTotal,
+
+        // Lista real dos produtos escolhidos pelo cliente.
+        'itens': itensPedido,
       },
     );
   }
+
+  // =============================================================
+  // BUILD
+  // =============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +130,7 @@ class _CarrinhoTelaState extends State<CarrinhoTela> {
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.arrow_back_ios_new),
                   ),
+
                   const Expanded(
                     child: Text(
                       'Carrinho',
@@ -92,6 +142,7 @@ class _CarrinhoTelaState extends State<CarrinhoTela> {
                       ),
                     ),
                   ),
+
                   IconButton(
                     tooltip: 'Limpar carrinho',
                     onPressed: carrinho.vazio ? null : _limparCarrinho,
@@ -119,6 +170,9 @@ class _CarrinhoTelaState extends State<CarrinhoTela> {
                             padding: const EdgeInsets.all(12),
                             child: Row(
                               children: [
+                                // =================================
+                                // IMAGEM
+                                // =================================
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
                                   child: Image.network(
@@ -142,6 +196,9 @@ class _CarrinhoTelaState extends State<CarrinhoTela> {
 
                                 const SizedBox(width: 12),
 
+                                // =================================
+                                // DADOS DO PRODUTO
+                                // =================================
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -163,8 +220,12 @@ class _CarrinhoTelaState extends State<CarrinhoTela> {
                                         ),
                                       ),
 
+                                      // ===========================
+                                      // OBSERVAÇÃO
+                                      // ===========================
                                       if (item.observacao.isNotEmpty) ...[
                                         const SizedBox(height: 4),
+
                                         Text(
                                           item.observacao,
                                           maxLines: 2,
@@ -178,6 +239,9 @@ class _CarrinhoTelaState extends State<CarrinhoTela> {
 
                                       const SizedBox(height: 8),
 
+                                      // ===========================
+                                      // TOTAL DO ITEM
+                                      // ===========================
                                       Text(
                                         Formatters.money(item.total),
                                         style: const TextStyle(
@@ -189,6 +253,9 @@ class _CarrinhoTelaState extends State<CarrinhoTela> {
                                   ),
                                 ),
 
+                                // =================================
+                                // QUANTIDADE
+                                // =================================
                                 _QuantidadeControle(
                                   quantidade: item.quantidade,
                                   onAdd: () => _aumentarQuantidade(index),
@@ -244,6 +311,7 @@ class _QuantidadeControle extends StatelessWidget {
           icon: const Icon(Icons.remove_circle_outline, color: AppColors.red),
           onPressed: onRemove,
         ),
+
         SizedBox(
           width: 24,
           child: Text(
@@ -252,6 +320,7 @@ class _QuantidadeControle extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
         ),
+
         IconButton(
           tooltip: 'Adicionar',
           icon: const Icon(Icons.add_circle_outline, color: AppColors.green),
@@ -297,6 +366,9 @@ class _ResumoCarrinho extends StatelessWidget {
 
           const SizedBox(height: 16),
 
+          // =====================================================
+          // CONTINUAR COMPRANDO
+          // =====================================================
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -312,6 +384,9 @@ class _ResumoCarrinho extends StatelessWidget {
 
           const SizedBox(height: 10),
 
+          // =====================================================
+          // CONTINUAR PEDIDO
+          // =====================================================
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -358,6 +433,7 @@ class _LinhaResumo extends StatelessWidget {
             fontWeight: destaque ? FontWeight.w800 : FontWeight.w500,
           ),
         ),
+
         Text(
           value,
           style: TextStyle(
@@ -389,17 +465,23 @@ class _CarrinhoVazio extends StatelessWidget {
             size: 72,
             color: AppColors.green,
           ),
+
           const SizedBox(height: 12),
+
           const Text(
             'Seu carrinho está vazio',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
+
           const SizedBox(height: 4),
+
           const Text(
             'Volte ao cardápio para escolher um produto.',
             style: TextStyle(color: AppColors.mutedText),
           ),
+
           const SizedBox(height: 20),
+
           OutlinedButton.icon(
             onPressed: () {
               Navigator.popUntil(context, ModalRoute.withName('/cliente/home'));

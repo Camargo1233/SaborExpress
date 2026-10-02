@@ -7,6 +7,10 @@ class PedidoRepository {
   static const String baseUrl =
       'http://localhost:3000/api/restaurantes/sabor-express';
 
+  // ============================================================
+  // TOKEN
+  // ============================================================
+
   Future<String> _buscarToken() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token');
@@ -18,12 +22,20 @@ class PedidoRepository {
     return token;
   }
 
+  // ============================================================
+  // HEADERS
+  // ============================================================
+
   Map<String, String> _headers(String token) {
     return {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $token',
     };
   }
+
+  // ============================================================
+  // MENSAGEM DE ERRO
+  // ============================================================
 
   String _mensagemErro(http.Response response) {
     try {
@@ -45,6 +57,86 @@ class PedidoRepository {
     } catch (_) {}
 
     return 'Erro ${response.statusCode}';
+  }
+
+  // ============================================================
+  // CRIAR PEDIDO DE RETIRADA
+  // ============================================================
+
+  Future<Map<String, dynamic>> criarPedidoRetirada({String? observacao}) async {
+    final token = await _buscarToken();
+
+    final body = <String, dynamic>{'tipo': 'retirada'};
+
+    if (observacao != null && observacao.trim().isNotEmpty) {
+      body['observacao'] = observacao.trim();
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/pedidos'),
+      headers: _headers(token),
+      body: jsonEncode(body),
+    );
+
+    if (response.statusCode != 201) {
+      throw Exception(
+        'Não foi possível criar o pedido de retirada: '
+        '${_mensagemErro(response)}',
+      );
+    }
+
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! Map) {
+      throw Exception('Resposta inválida ao criar o pedido de retirada.');
+    }
+
+    return Map<String, dynamic>.from(dados);
+  }
+
+  // ============================================================
+  // CRIAR PEDIDO DELIVERY
+  // ============================================================
+
+  Future<Map<String, dynamic>> criarPedidoDelivery({
+    required String enderecoId,
+    String? observacao,
+  }) async {
+    if (enderecoId.trim().isEmpty) {
+      throw Exception('Endereço de entrega não informado.');
+    }
+
+    final token = await _buscarToken();
+
+    final body = <String, dynamic>{
+      'tipo': 'delivery',
+      'enderecoId': enderecoId.trim(),
+    };
+
+    if (observacao != null && observacao.trim().isNotEmpty) {
+      body['observacao'] = observacao.trim();
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/pedidos'),
+      headers: _headers(token),
+      body: jsonEncode(body),
+    );
+
+    if (response.statusCode != 201) {
+      throw Exception(
+        'Não foi possível criar o pedido de delivery: '
+        '${_mensagemErro(response)}',
+      );
+    }
+
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! Map) {
+      throw Exception('Resposta inválida ao criar o pedido de delivery.');
+    }
+
+    return Map<String, dynamic>.from(dados);
   }
 
   // ============================================================
@@ -74,11 +166,18 @@ class PedidoRepository {
 
     if (response.statusCode != 201) {
       throw Exception(
-        'Não foi possível criar o pedido: ${_mensagemErro(response)}',
+        'Não foi possível criar o pedido: '
+        '${_mensagemErro(response)}',
       );
     }
 
-    return Map<String, dynamic>.from(jsonDecode(response.body));
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! Map) {
+      throw Exception('Resposta inválida ao criar o pedido.');
+    }
+
+    return Map<String, dynamic>.from(dados);
   }
 
   // ============================================================
@@ -153,7 +252,13 @@ class PedidoRepository {
       );
     }
 
-    return Map<String, dynamic>.from(jsonDecode(response.body));
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! Map) {
+      throw Exception('Formato do pedido inválido.');
+    }
+
+    return Map<String, dynamic>.from(dados);
   }
 
   // ============================================================
@@ -190,7 +295,13 @@ class PedidoRepository {
       );
     }
 
-    return Map<String, dynamic>.from(jsonDecode(response.body));
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! Map) {
+      throw Exception('Resposta inválida ao adicionar o produto.');
+    }
+
+    return Map<String, dynamic>.from(dados);
   }
 
   // ============================================================
@@ -228,7 +339,13 @@ class PedidoRepository {
       );
     }
 
-    return Map<String, dynamic>.from(jsonDecode(response.body));
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! Map) {
+      throw Exception('Resposta inválida ao atualizar o item.');
+    }
+
+    return Map<String, dynamic>.from(dados);
   }
 
   // ============================================================
@@ -255,7 +372,13 @@ class PedidoRepository {
       );
     }
 
-    return Map<String, dynamic>.from(jsonDecode(response.body));
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! Map) {
+      throw Exception('Resposta inválida ao remover o item.');
+    }
+
+    return Map<String, dynamic>.from(dados);
   }
 
   // ============================================================
@@ -277,11 +400,173 @@ class PedidoRepository {
       );
     }
 
-    return Map<String, dynamic>.from(jsonDecode(response.body));
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! Map) {
+      throw Exception('Resposta inválida ao confirmar o pedido.');
+    }
+
+    return Map<String, dynamic>.from(dados);
   }
 
   // ============================================================
-  // ALTERAR STATUS
+  // CRIAR PAGAMENTO
+  // ============================================================
+  //
+  // Métodos aceitos pelo backend:
+  //
+  // pix
+  // cartao_credito
+  // cartao_debito
+  // dinheiro
+  // vale_refeicao
+  // na_entrega
+  // no_local
+  //
+  // Para o Pix vamos utilizar:
+  //
+  // metodo: pix
+  //
+  // O pagamento nasce como "pendente".
+  // ============================================================
+
+  Future<Map<String, dynamic>> criarPagamento({
+    required String pedidoId,
+    required String metodo,
+    double? valor,
+    double? trocoPara,
+    String? idempotencyKey,
+  }) async {
+    final token = await _buscarToken();
+
+    final body = <String, dynamic>{'metodo': metodo};
+
+    if (valor != null) {
+      body['valor'] = valor;
+    }
+
+    if (trocoPara != null) {
+      body['trocoPara'] = trocoPara;
+    }
+
+    if (idempotencyKey != null && idempotencyKey.trim().isNotEmpty) {
+      body['idempotencyKey'] = idempotencyKey.trim();
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/pedidos/$pedidoId/pagamentos'),
+      headers: _headers(token),
+      body: jsonEncode(body),
+    );
+
+    // O backend pode retornar:
+    //
+    // 201 = pagamento criado
+    // 200 = pagamento reaproveitado por idempotência
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception(
+        'Não foi possível criar o pagamento: '
+        '${_mensagemErro(response)}',
+      );
+    }
+
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! Map) {
+      throw Exception('Resposta inválida ao criar o pagamento.');
+    }
+
+    return Map<String, dynamic>.from(dados);
+  }
+
+  // ============================================================
+  // CRIAR PAGAMENTO PIX
+  // ============================================================
+
+  Future<Map<String, dynamic>> criarPagamentoPix({
+    required String pedidoId,
+    double? valor,
+    String? idempotencyKey,
+  }) {
+    return criarPagamento(
+      pedidoId: pedidoId,
+      metodo: 'pix',
+      valor: valor,
+      idempotencyKey: idempotencyKey,
+    );
+  }
+
+  // ============================================================
+  // CONFIRMAR PAGAMENTO
+  // ============================================================
+  //
+  // No projeto atual esta rota simula o webhook do provedor.
+  //
+  // IMPORTANTE:
+  //
+  // confirmar o pagamento NÃO altera pedidos.status para
+  // "concluido".
+  //
+  // Ele altera o pagamento para "aprovado" e sincroniza
+  // pedidos.status_pagamento.
+  // ============================================================
+
+  Future<Map<String, dynamic>> confirmarPagamento(String pagamentoId) async {
+    final token = await _buscarToken();
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/pagamentos/$pagamentoId/confirmar'),
+      headers: _headers(token),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Não foi possível confirmar o pagamento: '
+        '${_mensagemErro(response)}',
+      );
+    }
+
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! Map) {
+      throw Exception('Resposta inválida ao confirmar o pagamento.');
+    }
+
+    return Map<String, dynamic>.from(dados);
+  }
+
+  // ============================================================
+  // LISTAR PAGAMENTOS DO PEDIDO
+  // ============================================================
+
+  Future<List<Map<String, dynamic>>> listarPagamentos(String pedidoId) async {
+    final token = await _buscarToken();
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/pedidos/$pedidoId/pagamentos'),
+      headers: _headers(token),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Não foi possível carregar os pagamentos: '
+        '${_mensagemErro(response)}',
+      );
+    }
+
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! List) {
+      throw Exception('Formato da lista de pagamentos inválido.');
+    }
+
+    return dados
+        .map((pagamento) => Map<String, dynamic>.from(pagamento))
+        .toList();
+  }
+
+  // ============================================================
+  // ALTERAR STATUS DO PEDIDO
   // ============================================================
 
   Future<Map<String, dynamic>> alterarStatus({
@@ -310,6 +595,12 @@ class PedidoRepository {
       );
     }
 
-    return Map<String, dynamic>.from(jsonDecode(response.body));
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! Map) {
+      throw Exception('Resposta inválida ao alterar o status do pedido.');
+    }
+
+    return Map<String, dynamic>.from(dados);
   }
 }

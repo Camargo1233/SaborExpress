@@ -24,6 +24,17 @@ class MesaRepository {
   }
 
   // ============================================================
+  // HEADERS
+  // ============================================================
+
+  Map<String, String> _headers(String token) {
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
+  }
+
+  // ============================================================
   // TRATAR ERROS
   // ============================================================
 
@@ -50,19 +61,15 @@ class MesaRepository {
   }
 
   // ============================================================
-  // LISTAR MESAS
-  // GET /mesas
+  // CLIENTE - LISTAR MESAS DISPONÍVEIS
   // ============================================================
 
-  Future<List<Map<String, dynamic>>> listarMesas() async {
+  Future<List<Map<String, dynamic>>> listarMesasDisponiveis() async {
     final token = await _buscarToken();
 
     final response = await http.get(
-      Uri.parse('$baseUrl/mesas'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      Uri.parse('$baseUrl/mesas/disponiveis'),
+      headers: _headers(token),
     );
 
     if (response.statusCode != 200) {
@@ -82,8 +89,73 @@ class MesaRepository {
   }
 
   // ============================================================
-  // ABRIR COMANDA / OCUPAR MESA
-  // POST /mesas/:mesaId/sessoes
+  // CLIENTE - RESERVAR MESA
+  // ============================================================
+
+  Future<Map<String, dynamic>> reservarMesa({
+    required String mesaId,
+    int? qtdPessoas,
+  }) async {
+    final token = await _buscarToken();
+
+    final body = <String, dynamic>{};
+
+    if (qtdPessoas != null) {
+      body['qtdPessoas'] = qtdPessoas;
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/mesas/$mesaId/reservar'),
+      headers: _headers(token),
+      body: jsonEncode(body),
+    );
+
+    if (response.statusCode != 201) {
+      throw Exception(
+        'Não foi possível reservar a mesa: '
+        '${_mensagemErro(response)}',
+      );
+    }
+
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! Map<String, dynamic>) {
+      throw Exception('Resposta inválida ao reservar a mesa.');
+    }
+
+    return dados;
+  }
+
+  // ============================================================
+  // EQUIPE - LISTAR TODAS AS MESAS
+  // ============================================================
+
+  Future<List<Map<String, dynamic>>> listarMesas() async {
+    final token = await _buscarToken();
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/mesas'),
+      headers: _headers(token),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Não foi possível carregar as mesas: '
+        '${_mensagemErro(response)}',
+      );
+    }
+
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! List) {
+      throw Exception('Formato de resposta das mesas inválido.');
+    }
+
+    return dados.map((mesa) => Map<String, dynamic>.from(mesa)).toList();
+  }
+
+  // ============================================================
+  // EQUIPE - ABRIR COMANDA / OCUPAR MESA
   // ============================================================
 
   Future<Map<String, dynamic>> abrirSessao({
@@ -100,10 +172,7 @@ class MesaRepository {
 
     final response = await http.post(
       Uri.parse('$baseUrl/mesas/$mesaId/sessoes'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: _headers(token),
       body: jsonEncode(body),
     );
 
@@ -125,7 +194,6 @@ class MesaRepository {
 
   // ============================================================
   // DETALHAR COMANDA
-  // GET /sessoes/:sessaoId
   // ============================================================
 
   Future<Map<String, dynamic>> detalharSessao(String sessaoId) async {
@@ -133,10 +201,7 @@ class MesaRepository {
 
     final response = await http.get(
       Uri.parse('$baseUrl/sessoes/$sessaoId'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: _headers(token),
     );
 
     if (response.statusCode != 200) {
@@ -156,8 +221,7 @@ class MesaRepository {
   }
 
   // ============================================================
-  // DEFINIR TAXA DE SERVIÇO
-  // PATCH /sessoes/:sessaoId/servico
+  // TAXA DE SERVIÇO
   // ============================================================
 
   Future<Map<String, dynamic>> definirServico({
@@ -168,10 +232,7 @@ class MesaRepository {
 
     final response = await http.patch(
       Uri.parse('$baseUrl/sessoes/$sessaoId/servico'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: _headers(token),
       body: jsonEncode({'aceito': aceito}),
     );
 
@@ -192,8 +253,7 @@ class MesaRepository {
   }
 
   // ============================================================
-  // FECHAR COMANDA / LIBERAR MESA
-  // POST /sessoes/:sessaoId/fechar
+  // FECHAR COMANDA
   // ============================================================
 
   Future<Map<String, dynamic>> fecharSessao(String sessaoId) async {
@@ -201,10 +261,7 @@ class MesaRepository {
 
     final response = await http.post(
       Uri.parse('$baseUrl/sessoes/$sessaoId/fechar'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: _headers(token),
     );
 
     if (response.statusCode != 200) {

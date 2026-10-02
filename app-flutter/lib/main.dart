@@ -42,22 +42,23 @@ class SaborExpressApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: "Sabor Express",
+      title: 'Sabor Express',
       theme: AppTheme.light,
       initialRoute: '/',
+
       routes: {
-        // =========================
+        // ============================================================
         // TELAS INICIAIS
-        // =========================
+        // ============================================================
         '/': (context) => const SplashTela(),
 
         '/login': (context) => const LoginTela(),
 
         '/cadastro': (context) => const CadastroTela(),
 
-        // =========================
+        // ============================================================
         // CLIENTE
-        // =========================
+        // ============================================================
         '/cliente/home': (context) => const HomeTela(),
 
         '/cliente/carrinho': (context) => const CarrinhoTela(),
@@ -76,24 +77,31 @@ class SaborExpressApp extends StatelessWidget {
 
         '/cliente/pagamento-sucesso': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
-          final tipoPedido = args is Map<String, dynamic>
-              ? args['tipoPedido']?.toString() ?? 'delivery'
-              : 'delivery';
+
+          String tipoPedido = 'delivery';
+
+          if (args is Map) {
+            tipoPedido = args['tipoPedido']?.toString() ?? 'delivery';
+          }
+
           return PagamentoSucessoTela(tipoPedido: tipoPedido);
         },
 
         '/cliente/status-pedido': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
-          final tipoPedido = args is Map<String, dynamic>
-              ? args['tipoPedido']?.toString() ?? 'delivery'
-              : 'delivery';
+
+          String tipoPedido = 'delivery';
+
+          if (args is Map) {
+            tipoPedido = args['tipoPedido']?.toString() ?? 'delivery';
+          }
+
           return StatusPedidoTela(tipoPedido: tipoPedido);
         },
 
-        // =========================
+        // ============================================================
         // GARÇOM
-        // =========================
-        // GARÇOM
+        // ============================================================
         '/garcom/mesa': (context) => const MesasGarcomTela(),
 
         '/garcom/pedido': (context) => const PedidoMesaGarcomTela(),
@@ -102,15 +110,23 @@ class SaborExpressApp extends StatelessWidget {
 
         '/garcom/finalizacao': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
-          final mesa = args is Map<String, dynamic>
-              ? args
-              : <String, dynamic>{'numero': 'Mesa'};
+
+          final Map<String, dynamic> mesa;
+
+          if (args is Map<String, dynamic>) {
+            mesa = args;
+          } else if (args is Map) {
+            mesa = Map<String, dynamic>.from(args);
+          } else {
+            mesa = <String, dynamic>{'numero': 'Mesa'};
+          }
+
           return FinalizacaoGarcomTela(mesa: mesa);
         },
 
-        // =========================
+        // ============================================================
         // ADMINISTRADOR
-        // =========================
+        // ============================================================
         '/adm/home': (context) => const HomeGerenteTela(),
 
         '/adm/cardapio': (context) => const CardapioGerenteTela(),
