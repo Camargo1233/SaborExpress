@@ -30,7 +30,8 @@ class _LoginTelaState extends State<LoginTela> {
 
     final email = emailController.text.trim().toLowerCase();
 
-    // Não usar trim() na senha: espaços podem fazer parte dela.
+    // Não usar trim() na senha:
+    // espaços podem fazer parte da senha.
     final senha = senhaController.text;
 
     if (email.isEmpty || senha.isEmpty) {
@@ -54,7 +55,7 @@ class _LoginTelaState extends State<LoginTela> {
           )
           .timeout(const Duration(seconds: 15));
 
-      // Ajuda a identificar o erro sem mostrar a senha nem o token.
+      // Não exibir senha ou token nos logs.
       debugPrint('LOGIN - HTTP ${response.statusCode}');
 
       dynamic dados;
@@ -87,6 +88,7 @@ class _LoginTelaState extends State<LoginTela> {
         }
 
         if (!mounted) return;
+
         _mostrarMensagem(mensagem);
         return;
       }
@@ -120,8 +122,7 @@ class _LoginTelaState extends State<LoginTela> {
       await prefs.setString('token', token);
       await prefs.setString('email_login', email);
 
-      // Limpa informações de um perfil anterior antes de
-      // salvar a sessão do usuário atual.
+      // Limpa informações de um perfil anterior.
       await prefs.remove('perfil');
       await prefs.remove('restaurante_slug');
       await prefs.remove('restaurante_id');
@@ -151,7 +152,9 @@ class _LoginTelaState extends State<LoginTela> {
 
         if (vinculo is Map<String, dynamic>) {
           final perfil = vinculo['perfil']?.toString();
+
           final restauranteSlug = vinculo['slug']?.toString();
+
           final restauranteId = vinculo['restaurante_id']?.toString();
 
           if (perfil != null) {
@@ -232,7 +235,9 @@ class _LoginTelaState extends State<LoginTela> {
       backgroundColor: AppColors.yellow,
       body: Stack(
         children: [
+          // ======================================================
           // IMAGEM
+          // ======================================================
           Positioned(
             top: 0,
             left: 0,
@@ -243,7 +248,9 @@ class _LoginTelaState extends State<LoginTela> {
             ),
           ),
 
+          // ======================================================
           // FORMULÁRIO
+          // ======================================================
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
@@ -269,13 +276,16 @@ class _LoginTelaState extends State<LoginTela> {
                   const SizedBox(height: 6),
 
                   const Text(
-                    'Entre com seu e-mail e senha para acessar o Sabor Express.',
+                    'Entre com seu e-mail e senha '
+                    'para acessar o Sabor Express.',
                     style: TextStyle(color: AppColors.mutedText, height: 1.35),
                   ),
 
                   const SizedBox(height: 24),
 
+                  // ==============================================
                   // E-MAIL
+                  // ==============================================
                   CustomTextField(
                     hint: 'E-mail',
                     controller: emailController,
@@ -285,7 +295,9 @@ class _LoginTelaState extends State<LoginTela> {
 
                   const SizedBox(height: 16),
 
+                  // ==============================================
                   // SENHA
+                  // ==============================================
                   CustomTextField(
                     hint: 'Senha',
                     obscure: true,
@@ -295,19 +307,32 @@ class _LoginTelaState extends State<LoginTela> {
 
                   const SizedBox(height: 12),
 
+                  // ==============================================
+                  // ESQUECEU A SENHA?
+                  // ==============================================
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () => _mostrarMensagem(
-                        'Recuperação de senha será integrada ao backend.',
+                      onPressed: carregando
+                          ? null
+                          : () {
+                              Navigator.pushNamed(context, '/esqueci-senha');
+                            },
+                      child: const Text(
+                        'Esqueceu sua senha?',
+                        style: TextStyle(
+                          color: AppColors.green,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                      child: const Text('Esqueceu sua senha?'),
                     ),
                   ),
 
                   const Spacer(),
 
-                  // BOTÃO
+                  // ==============================================
+                  // BOTÃO ENTRAR
+                  // ==============================================
                   if (carregando)
                     const Center(
                       child: CircularProgressIndicator(color: AppColors.green),
@@ -324,7 +349,9 @@ class _LoginTelaState extends State<LoginTela> {
             ),
           ),
 
-          // VOLTAR
+          // ======================================================
+          // BOTÃO VOLTAR
+          // ======================================================
           Positioned(
             top: 45,
             left: 20,
@@ -343,7 +370,9 @@ class _LoginTelaState extends State<LoginTela> {
               child: IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new, size: 20),
                 color: Colors.black,
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  Navigator.pop(context);
+                },
               ),
             ),
           ),

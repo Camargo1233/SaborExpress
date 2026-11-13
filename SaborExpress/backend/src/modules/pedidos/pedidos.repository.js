@@ -86,7 +86,8 @@ async function listar(restauranteId, filtros = {}) {
         and ($3::text is null or p.tipo::text = $3)
         and ($4::uuid is null or p.cliente_id = $4)
         and ($5::boolean is false or p.status in
-             ('confirmado','em_preparo','pronto','em_entrega'))
+     ('aguardando_confirmacao','confirmado',
+      'em_preparo','pronto','em_entrega'))
       order by p.criado_em desc
       limit coalesce($6, 100)`,
     [

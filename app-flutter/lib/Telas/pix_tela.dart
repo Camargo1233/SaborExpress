@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../Repositories/carrinho_repository.dart';
+import '../Repositories/pagamento_repository.dart';
 import '../Repositories/pedido_repository.dart';
 import '../utils/app_colors.dart';
 import '../utils/formatters.dart';
+import 'status_pedido_tela.dart';
 
+/// Pagamento Pix exclusivamente demonstrativo.
+/// Nenhum dinheiro real e transferido.
 class PixTela extends StatefulWidget {
   const PixTela({super.key});
 
@@ -15,17 +18,22 @@ class PixTela extends StatefulWidget {
 
 class _PixTelaState extends State<PixTela> {
   final PedidoRepository _pedidoRepository = PedidoRepository();
+  final PagamentoRepository _pagamentoRepository = PagamentoRepository();
   final CarrinhoRepository _carrinhoRepository = CarrinhoRepository.instance;
 
   bool _processando = false;
+  bool _confirmando = false;
   bool _pagamentoCriado = false;
+  bool _pagamentoConfirmado = false;
+  bool _redirecionando = false;
+  bool _argumentosCarregados = false;
+  bool _itensAdicionados = false;
 
+  String? _erro;
   String? _pedidoId;
   String? _pagamentoId;
-  String? _codigoPix;
 
   Map<String, dynamic> _dados = {};
-  bool _argumentosCarregados = false;
 
   double get _total {
     final valor = _dados['total'];
@@ -61,16 +69,20 @@ class _PixTelaState extends State<PixTela> {
 
     _argumentosCarregados = true;
 
-    final args = ModalRoute.of(context)?.settings.arguments;
+    final argumentos = ModalRoute.of(context)?.settings.arguments;
 
-    if (args is Map) {
-      _dados = Map<String, dynamic>.from(args);
+    if (argumentos is Map) {
+      _dados = Map<String, dynamic>.from(argumentos);
     }
-  }
 
-  // ============================================================
-  // UTILITÁRIOS
-  // ============================================================
+    _pedidoId = _buscarPedidoExistente();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _prepararPagamentoPix();
+      }
+    });
+  }
 
   String _limparErro(Object erro) {
     var mensagem = erro.toString();
@@ -80,6 +92,20 @@ class _PixTelaState extends State<PixTela> {
     }
 
     return mensagem;
+  }
+
+  String? _buscarPedidoExistente() {
+    final possibilidades = [_dados['pedidoId'], _dados['pedido_id']];
+
+    for (final valor in possibilidades) {
+      final id = valor?.toString().trim();
+
+      if (id != null && id.isNotEmpty) {
+        return id;
+      }
+    }
+
+    return null;
   }
 
   String? _buscarEnderecoId() {
@@ -137,24 +163,6 @@ class _PixTelaState extends State<PixTela> {
     return null;
   }
 
-  String? _buscarPedidoExistente() {
-    final possibilidades = [_dados['pedidoId'], _dados['pedido_id']];
-
-    for (final valor in possibilidades) {
-      final id = valor?.toString().trim();
-
-      if (id != null && id.isNotEmpty) {
-        return id;
-      }
-    }
-
-    return null;
-  }
-
-  // ============================================================
-  // CRIAR PEDIDO
-  // ============================================================
-
   Future<Map<String, dynamic>> _criarPedido() async {
     switch (_tipoPedido) {
       case 'delivery':
@@ -162,8 +170,7 @@ class _PixTelaState extends State<PixTela> {
 
         if (enderecoId == null) {
           throw Exception(
-            'O endereço de entrega não possui um '
-            'identificador válido. Volte para a sacola '
+            'Endereço inválido. Volte para a sacola '
             'e selecione o endereço novamente.',
           );
         }
@@ -174,10 +181,7 @@ class _PixTelaState extends State<PixTela> {
         final sessaoMesaId = _buscarSessaoMesaId();
 
         if (sessaoMesaId == null) {
-          throw Exception(
-            'A sessão da mesa não foi encontrada. '
-            'Volte para a sacola e selecione a mesa novamente.',
-          );
+          throw Exception('Sessão da mesa não encontrada.');
         }
 
         return _pedidoRepository.criarPedidoMesa(sessaoMesaId: sessaoMesaId);
@@ -187,10 +191,6 @@ class _PixTelaState extends State<PixTela> {
         return _pedidoRepository.criarPedidoRetirada();
     }
   }
-
-  // ============================================================
-  // ADICIONAR ITENS
-  // ============================================================
 
   Future<void> _adicionarItens(String pedidoId) async {
     final itens = _carrinhoRepository.itens;
@@ -212,100 +212,83 @@ class _PixTelaState extends State<PixTela> {
   }
 
   // ============================================================
-  // PREPARAR PEDIDO + PIX
+  // PREPARAR PAGAMENTO PIX
   // ============================================================
 
   Future<void> _prepararPagamentoPix() async {
-    if (_processando || _pagamentoCriado) {
+    if (_processando || _pagamentoCriado || _pagamentoConfirmado) {
       return;
     }
 
     setState(() {
       _processando = true;
+      _erro = null;
     });
 
     try {
-      // --------------------------------------------------------
-      // 1. Verifica se a Sacola já enviou um pedido real.
-      // --------------------------------------------------------
+      String? pedidoId = _pedidoId;
 
-      String? pedidoId = _buscarPedidoExistente();
-
-      // --------------------------------------------------------
-      // 2. Caso não exista, cria o pedido.
-      // --------------------------------------------------------
-
+      // Cria o pedido somente se ainda nao existir.
       if (pedidoId == null) {
         final pedido = await _criarPedido();
 
         pedidoId = pedido['id']?.toString();
 
         if (pedidoId == null || pedidoId.isEmpty) {
-          throw Exception('O servidor não retornou o identificador do pedido.');
+          throw Exception('O servidor não retornou o ID do pedido.');
         }
 
-        // ------------------------------------------------------
-        // 3. Adiciona os produtos.
-        // ------------------------------------------------------
-
-        await _adicionarItens(pedidoId);
-
-        // ------------------------------------------------------
-        // 4. Confirma o pedido.
-        //
-        // Retirada:
-        // backend coloca em em_preparo.
-        //
-        // Delivery:
-        // segue o fluxo definido no backend.
-        //
-        // Mesa:
-        // segue o fluxo da comanda.
-        // ------------------------------------------------------
-
-        await _pedidoRepository.confirmarPedido(pedidoId);
+        _pedidoId = pedidoId;
       }
 
-      // --------------------------------------------------------
-      // 5. Cria pagamento Pix.
-      //
-      // Não enviamos "valor", então o backend cobra
-      // automaticamente todo o saldo restante do pedido.
-      // --------------------------------------------------------
+      // Adiciona os itens somente uma vez nesta tela.
+      // Se o pedido veio de outra tela, considera
+      // que seus itens ja foram preparados.
+      if (!_itensAdicionados) {
+        if (_buscarPedidoExistente() == null) {
+          await _adicionarItens(pedidoId);
+        }
 
-      final pagamento = await _pedidoRepository.criarPagamentoPix(
+        _itensAdicionados = true;
+      }
+
+      // IMPORTANTE:
+      // Nao chama enviarPedido() aqui.
+      // O pedido so sera confirmado apos o pagamento.
+
+      final resposta = await _pagamentoRepository.criarPagamentoPix(
         pedidoId: pedidoId,
         idempotencyKey: 'pix-$pedidoId',
       );
 
+      final dynamic objeto = resposta['pagamento'] ?? resposta;
+
+      if (objeto is! Map) {
+        throw Exception('Resposta inválida ao preparar o Pix.');
+      }
+
+      final pagamento = Map<String, dynamic>.from(objeto);
+
       final pagamentoId = pagamento['id']?.toString();
 
       if (pagamentoId == null || pagamentoId.isEmpty) {
-        throw Exception(
-          'O servidor não retornou o identificador do pagamento.',
-        );
+        throw Exception('O servidor não retornou o ID do pagamento.');
       }
-
-      final codigoPix = pagamento['qr_code']?.toString();
 
       if (!mounted) return;
 
       setState(() {
         _pedidoId = pedidoId;
         _pagamentoId = pagamentoId;
-
-        _codigoPix = codigoPix == null || codigoPix.isEmpty
-            ? 'PIX-MOCK-$pedidoId'
-            : codigoPix;
-
         _pagamentoCriado = true;
+        _erro = null;
       });
     } catch (erro) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_limparErro(erro)), backgroundColor: Colors.red),
-      );
+      setState(() {
+        _erro = _limparErro(erro);
+      });
     } finally {
       if (mounted) {
         setState(() {
@@ -316,180 +299,168 @@ class _PixTelaState extends State<PixTela> {
   }
 
   // ============================================================
-  // CONFIRMAR PAGAMENTO
+  // CONFIRMAR PAGAMENTO DEMONSTRATIVO
   // ============================================================
 
-  Future<void> _confirmarPagamento() async {
-    if (_processando) return;
-
-    if (!_pagamentoCriado || _pagamentoId == null || _pedidoId == null) {
-      await _prepararPagamentoPix();
-
-      if (!_pagamentoCriado || _pagamentoId == null || _pedidoId == null) {
-        return;
-      }
-    }
-
-    setState(() {
-      _processando = true;
-    });
-
-    try {
-      final resultado = await _pedidoRepository.confirmarPagamento(
-        _pagamentoId!,
-      );
-
-      final statusPagamento =
-          resultado['statusPagamentoPedido']?.toString() ?? 'pago';
-
-      // --------------------------------------------------------
-      // IMPORTANTE:
-      //
-      // NÃO chamamos:
-      //
-      // alterarStatus(
-      //   status: 'concluido'
-      // )
-      //
-      // Pagamento aprovado e pedido concluído são coisas
-      // diferentes.
-      // --------------------------------------------------------
-
-      final dadosSucesso = <String, dynamic>{
-        ..._dados,
-
-        'pedidoId': _pedidoId,
-        'pagamentoId': _pagamentoId,
-
-        'tipoPedido': _tipoPedido,
-
-        'formaPagamento': 'Pix',
-
-        'pagamento': 'Pix',
-
-        'statusPagamento': statusPagamento,
-
-        'pagamentoAprovado': true,
-
-        'total': _total,
-      };
-
-      // O pedido já foi criado, os itens enviados e o
-      // pagamento aprovado. Agora podemos limpar o carrinho.
-      _carrinhoRepository.limpar();
-
-      if (!mounted) return;
-
-      Navigator.pushReplacementNamed(
-        context,
-        '/cliente/pagamento-sucesso',
-        arguments: dadosSucesso,
-      );
-    } catch (erro) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_limparErro(erro)), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _processando = false;
-        });
-      }
-    }
-  }
-
-  // ============================================================
-  // COPIAR PIX
-  // ============================================================
-
-  Future<void> _copiarPix() async {
-    if (_codigoPix == null || _codigoPix!.isEmpty) {
+  Future<void> _confirmarPagamentoDemonstrativo() async {
+    if (_confirmando ||
+        _pagamentoConfirmado ||
+        _pagamentoId == null ||
+        _pedidoId == null) {
       return;
     }
 
-    await Clipboard.setData(ClipboardData(text: _codigoPix!));
+    setState(() {
+      _confirmando = true;
+      _erro = null;
+    });
 
-    if (!mounted) return;
+    try {
+      var resultado = await _pagamentoRepository.consultarStatusPix(
+        _pagamentoId!,
+      );
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Código Pix copiado')));
+      var status = resultado['statusPagamentoPedido']
+          ?.toString()
+          .trim()
+          .toLowerCase();
+
+      // Simula a confirmacao apenas se ainda nao estiver pago.
+      if (status != 'pago') {
+        try {
+          await _pagamentoRepository.confirmarPagamento(_pagamentoId!);
+        } catch (erro) {
+          debugPrint('Erro na confirmação do Pix: $erro');
+        }
+
+        resultado = await _pagamentoRepository.consultarStatusPix(
+          _pagamentoId!,
+        );
+
+        status = resultado['statusPagamentoPedido']
+            ?.toString()
+            .trim()
+            .toLowerCase();
+      }
+
+      if (status != 'pago') {
+        throw Exception(
+          'O pagamento ainda não foi confirmado. '
+          'Verifique o status antes de continuar.',
+        );
+      }
+
+      // O pagamento demonstrativo foi aprovado.
+      // Agora o pedido pode ser confirmado.
+      await _pedidoRepository.confirmarPedido(_pedidoId!);
+
+      if (!mounted) return;
+
+      setState(() {
+        _pagamentoConfirmado = true;
+        _erro = null;
+      });
+
+      _abrirStatusPedido();
+    } catch (erro) {
+      if (!mounted) return;
+
+      setState(() {
+        _erro = _limparErro(erro);
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _confirmando = false;
+        });
+      }
+    }
   }
 
   // ============================================================
-  // TELA
+  // ABRIR STATUS DO PEDIDO
+  // ============================================================
+
+  void _abrirStatusPedido() {
+    if (!mounted || _redirecionando || _pedidoId == null) {
+      return;
+    }
+
+    _redirecionando = true;
+
+    _carrinhoRepository.limpar();
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            StatusPedidoTela(tipoPedido: _tipoPedido, pedidoId: _pedidoId!),
+      ),
+    );
+  }
+
+  // ============================================================
+  // INTERFACE
   // ============================================================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Pagamento Pix')),
+      appBar: AppBar(title: const Text('Pix demonstrativo')),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              const SizedBox(height: 16),
+
+              Container(
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet_outlined,
+                  size: 76,
+                  color: AppColors.green,
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
               const Text(
-                'Escaneie o QR Code',
+                'Pagamento Pix de demonstração',
+                textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
               ),
 
               const SizedBox(height: 12),
 
+              const Text(
+                'Este é um pagamento fictício para '
+                'apresentação do SaborExpress. '
+                'Nenhum dinheiro será transferido.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.mutedText),
+              ),
+
+              const SizedBox(height: 28),
+
               Text(
                 _tipoPedido == 'delivery'
-                    ? 'Pagamento do pedido para entrega'
+                    ? 'Pedido para entrega'
                     : _tipoPedido == 'mesa'
                     ? 'Pagamento da mesa'
-                    : 'Pagamento do pedido para retirada',
-                textAlign: TextAlign.center,
+                    : 'Pedido para retirada',
                 style: const TextStyle(color: AppColors.mutedText),
               ),
 
-              const SizedBox(height: 24),
-
-              Container(
-                width: 240,
-                height: 240,
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: _processando && !_pagamentoCriado
-                    ? const Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.green,
-                        ),
-                      )
-                    : const Icon(
-                        Icons.qr_code_2,
-                        size: 190,
-                        color: AppColors.text,
-                      ),
-              ),
-
-              const SizedBox(height: 20),
-
-              if (!_pagamentoCriado)
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.pix),
-                  label: Text(_processando ? 'Gerando Pix...' : 'Gerar Pix'),
-                  onPressed: _processando ? null : _prepararPagamentoPix,
-                )
-              else
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.copy),
-                  label: const Text('Copiar código Pix'),
-                  onPressed: _copiarPix,
-                ),
-
-              const SizedBox(height: 32),
+              const SizedBox(height: 12),
 
               const Text(
-                'Valor do pagamento',
+                'Valor do pedido',
                 style: TextStyle(color: AppColors.mutedText),
               ),
 
@@ -498,37 +469,92 @@ class _PixTelaState extends State<PixTela> {
               Text(
                 Formatters.money(_total),
                 style: const TextStyle(
-                  fontSize: 34,
+                  fontSize: 36,
                   fontWeight: FontWeight.w800,
                   color: AppColors.green,
                 ),
               ),
 
-              const Spacer(),
+              const SizedBox(height: 28),
 
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  icon: _processando
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.check_circle_outline),
-                  label: Text(
-                    _processando
-                        ? 'Processando...'
-                        : _pagamentoCriado
-                        ? 'Confirmar pagamento'
-                        : 'Gerar e confirmar pagamento',
-                  ),
-                  onPressed: _processando ? null : _confirmarPagamento,
+              if (_processando) ...[
+                const CircularProgressIndicator(color: AppColors.green),
+                const SizedBox(height: 14),
+                const Text(
+                  'Preparando pagamento demonstrativo...',
+                  textAlign: TextAlign.center,
                 ),
-              ),
+              ],
+
+              if (_pagamentoCriado && !_pagamentoConfirmado) ...[
+                const Icon(
+                  Icons.check_circle_outline,
+                  color: AppColors.green,
+                  size: 40,
+                ),
+
+                const SizedBox(height: 12),
+
+                const Text(
+                  'Pagamento demonstrativo preparado',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+
+                const SizedBox(height: 18),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _confirmando
+                        ? null
+                        : _confirmarPagamentoDemonstrativo,
+                    icon: _confirmando
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check_circle_outline),
+                    label: Text(
+                      _confirmando
+                          ? 'Confirmando...'
+                          : 'Confirmar pagamento demonstrativo',
+                    ),
+                  ),
+                ),
+              ],
+
+              if (_pagamentoConfirmado) ...[
+                const Icon(
+                  Icons.check_circle,
+                  color: AppColors.green,
+                  size: 64,
+                ),
+                const SizedBox(height: 12),
+                const Text('Pagamento confirmado!'),
+              ],
+
+              if (_erro != null) ...[
+                const SizedBox(height: 18),
+
+                Text(
+                  _erro!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.red),
+                ),
+
+                const SizedBox(height: 12),
+
+                if (!_pagamentoCriado)
+                  OutlinedButton.icon(
+                    onPressed: _processando ? null : _prepararPagamentoPix,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Tentar novamente'),
+                  ),
+              ],
+
+              const SizedBox(height: 24),
             ],
           ),
         ),

@@ -7,10 +7,10 @@ const AppError = require('../../utils/AppError');
  * =====================================================================
  * O ciclo financeiro e SEPARADO do ciclo de producao do pedido:
  *
- *   pendente ──aprovar──> aprovado ──estornar──> estornado
- *      │
- *      ├──recusar──> recusado
- *      └──cancelar──> cancelado
+ *   pendente â”€â”€aprovarâ”€â”€> aprovado â”€â”€estornarâ”€â”€> estornado
+ *      â”‚
+ *      â”œâ”€â”€recusarâ”€â”€> recusado
+ *      â””â”€â”€cancelarâ”€â”€> cancelado
  *
  * pedidos.status_pagamento e derivado da soma dos pagamentos aprovados:
  *   0                      -> nao_iniciado / pendente
@@ -66,12 +66,6 @@ async function criar(restaurante, pedidoId, req, dados) {
       throw AppError.proibido('Este pedido nao pertence a voce.');
     }
 
-    if (pedido.status === 'rascunho') {
-      throw AppError.regraDeNegocio(
-        'Confirme o pedido antes de iniciar o pagamento.',
-        'PEDIDO_EM_RASCUNHO'
-      );
-    }
     if (pedido.status === 'cancelado') {
       throw AppError.regraDeNegocio('Pedido cancelado nao pode receber pagamento.');
     }
@@ -216,4 +210,72 @@ async function listar(restaurante, pedidoId) {
   return rows;
 }
 
-module.exports = { criar, confirmar, estornar, listar, sincronizarStatusPagamento };
+
+async function consultarStatusPix(restaurante, pagamentoId, req) {
+  const { rows } = await db.query(
+    `SELECT
+       pg.id,
+       pg.pedido_id,
+       pg.metodo,
+       pg.status,
+       pg.valor,
+       pg.provedor,
+       p.status_pagamento,
+       p.cliente_id
+     FROM pagamentos pg
+     JOIN pedidos p
+       ON p.id = pg.pedido_id
+      AND p.restaurante_id = pg.restaurante_id
+     WHERE pg.restaurante_id = $1
+       AND pg.id = $2`,
+    [restaurante.id, pagamentoId]
+  );
+
+  const pagamento = rows[0];
+
+  if (!pagamento) {
+    throw AppError.naoEncontrado('Pagamento');
+  }
+
+  const perfil = req.perfil || 'cliente';
+
+  if (
+    perfil === 'cliente' &&
+    String(pagamento.cliente_id) !== String(req.usuario.id)
+  ) {
+    throw AppError.proibido(
+      'Este pagamento nao pertence a voce.'
+    );
+  }
+
+  if (
+    pagamento.metodo !== 'pix' ||
+    pagamento.provedor !== 'mock'
+  ) {
+    throw AppError.regraDeNegocio(
+      'Este pagamento nao e um Pix demonstrativo.'
+    );
+  }
+
+  return {
+    pagamento: {
+      id: pagamento.id,
+      pedido_id: pagamento.pedido_id,
+      metodo: pagamento.metodo,
+      status: pagamento.status,
+      valor: pagamento.valor,
+      provedor: pagamento.provedor,
+    },
+    statusPagamentoPedido: pagamento.status_pagamento,
+  };
+}
+
+
+module.exports = {
+  criar,
+  confirmar,
+  estornar,
+  listar,
+  consultarStatusPix,
+  sincronizarStatusPagamento,
+};

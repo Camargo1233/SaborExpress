@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../Repositories/pedido_repository.dart';
-
 import '../Repositories/pagamento_repository.dart';
 
 class PedidosGerenteTela extends StatefulWidget {
@@ -15,13 +14,12 @@ class PedidosGerenteTela extends StatefulWidget {
 
 class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
   final PedidoRepository _pedidoRepository = PedidoRepository();
-
   final PagamentoRepository _pagamentoRepository = PagamentoRepository();
 
   Timer? _timer;
 
+  bool _carregandoLista = false;
   bool carregando = true;
-
   bool atualizando = false;
 
   String? erro;
@@ -29,16 +27,16 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
   List<Map<String, dynamic>> pedidos = [];
 
   final Map<String, int> _quantidadesItens = {};
-
   final Set<String> _buscandoQuantidade = {};
+  final Set<String> _quantidadesConsultadas = {};
 
   final Map<String, String> _metodosPagamento = {};
   final Set<String> _buscandoMetodoPagamento = {};
+  final Set<String> _metodosConsultados = {};
 
   @override
   void initState() {
     super.initState();
-
     _iniciarTela();
   }
 
@@ -48,56 +46,42 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
     if (!mounted) return;
 
     _timer = Timer.periodic(const Duration(seconds: 30), (_) {
-      carregarPedidos(silencioso: true);
+      if (!_carregandoLista && !atualizando) {
+        carregarPedidos(silencioso: true);
+      }
     });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-
     super.dispose();
   }
 
   // ============================================================
-
   // CARREGAR PEDIDOS
-
   // ============================================================
 
   Future<void> carregarPedidos({bool silencioso = false}) async {
-    // Não usa o bloqueio das ações dos botões para impedir a atualização
+    if (_carregandoLista || atualizando) return;
 
-    // da lista. Assim uma ação concluída nunca deixa os botões travados.
+    _carregandoLista = true;
 
-    final estavaAtualizando = atualizando;
-
-    if (!estavaAtualizando) {
-      atualizando = true;
-    }
-
-    if (!silencioso && mounted) {
+    if (!silencioso && mounted && pedidos.isEmpty) {
       setState(() {
         carregando = true;
-
         erro = null;
       });
     }
 
     try {
-      // Apenas UMA chamada para a listagem.
-
-      // Detalhes e pagamentos são consultados sob demanda.
-
       final lista = await _pedidoRepository.listarPedidos();
 
       if (!mounted) return;
 
       setState(() {
         pedidos = lista;
-
         carregando = false;
-
         erro = null;
       });
     } catch (e) {
@@ -108,21 +92,16 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
       if (!silencioso) {
         setState(() {
           carregando = false;
-
           erro = e.toString().replaceFirst('Exception: ', '');
         });
       }
     } finally {
-      if (!estavaAtualizando) {
-        atualizando = false;
-      }
+      _carregandoLista = false;
     }
   }
 
   // ============================================================
-
   // PEDIDOS EM ANDAMENTO
-
   // ============================================================
 
   bool _pedidoVazio(Map<String, dynamic> pedido) {
@@ -150,9 +129,7 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
   }
 
   // ============================================================
-
   // PEDIDOS FINALIZADOS
-
   // ============================================================
 
   List<Map<String, dynamic>> get pedidosFinalizados {
@@ -166,47 +143,31 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
   }
 
   // ============================================================
-
   // CONVERSÕES
-
   // ============================================================
 
   int _paraInt(dynamic valor) {
-    if (valor == null) {
-      return 0;
-    }
+    if (valor == null) return 0;
 
-    if (valor is int) {
-      return valor;
-    }
+    if (valor is int) return valor;
 
-    if (valor is num) {
-      return valor.toInt();
-    }
+    if (valor is num) return valor.toInt();
 
     return int.tryParse(valor.toString()) ?? 0;
   }
 
   double _paraDouble(dynamic valor) {
-    if (valor == null) {
-      return 0;
-    }
+    if (valor == null) return 0;
 
-    if (valor is double) {
-      return valor;
-    }
+    if (valor is double) return valor;
 
-    if (valor is num) {
-      return valor.toDouble();
-    }
+    if (valor is num) return valor.toDouble();
 
     return double.tryParse(valor.toString().replaceAll(',', '.')) ?? 0;
   }
 
   // ============================================================
-
-  // DINHEIRO
-
+  // FORMATAÇÃO DE DINHEIRO
   // ============================================================
 
   String _formatarDinheiro(dynamic valor) {
@@ -215,7 +176,6 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
     final partes = numero.toStringAsFixed(2).split('.');
 
     final inteiro = partes[0];
-
     final decimal = partes[1];
 
     final buffer = StringBuffer();
@@ -234,9 +194,7 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
   }
 
   // ============================================================
-
-  // NOME DA MESA
-
+  // NOME DO PEDIDO
   // ============================================================
 
   String _nomePedido(Map<String, dynamic> pedido) {
@@ -267,9 +225,7 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
   }
 
   // ============================================================
-
   // QUANTIDADE DE ITENS
-
   // ============================================================
 
   String _quantidadeItens(Map<String, dynamic> pedido) {
@@ -297,7 +253,6 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
           )
           .fold<int>(
             0,
-
             (total, item) =>
                 total +
                 (_paraInt(item['quantidade']) > 0
@@ -327,11 +282,13 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
   Future<void> _carregarQuantidadeSobDemanda(String pedidoId) async {
     if (_buscandoQuantidade.contains(pedidoId) ||
-        _quantidadesItens.containsKey(pedidoId)) {
+        _quantidadesItens.containsKey(pedidoId) ||
+        _quantidadesConsultadas.contains(pedidoId)) {
       return;
     }
 
     _buscandoQuantidade.add(pedidoId);
+    _quantidadesConsultadas.add(pedidoId);
 
     try {
       final detalhes = await _pedidoRepository.detalharPedido(pedidoId);
@@ -360,7 +317,6 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
             )
             .fold<int>(
               0,
-
               (total, item) =>
                   total +
                   (_paraInt(item['quantidade']) > 0
@@ -372,17 +328,15 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
       _quantidadesItens[pedidoId] = quantidade;
 
       if (mounted) setState(() {});
-    } catch (_) {
-      // Não derruba a tela caso uma consulta individual seja limitada.
+    } catch (e) {
+      debugPrint('Erro ao consultar itens do pedido $pedidoId: $e');
     } finally {
       _buscandoQuantidade.remove(pedidoId);
     }
   }
 
   // ============================================================
-
-  // STATUS
-
+  // STATUS DOS PEDIDOS
   // ============================================================
 
   String _nomeStatus(String status) {
@@ -449,14 +403,6 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
     return _statusPagamento(pedido) == 'pago';
   }
 
-  String _textoPagamento(Map<String, dynamic> pedido) {
-    final status = _statusPagamento(pedido);
-
-    if (status == 'pago') return 'Pago';
-
-    return 'Pendente';
-  }
-
   Color _corPagamento(Map<String, dynamic> pedido) {
     return _estaPago(pedido) ? Colors.green : Colors.orange;
   }
@@ -465,18 +411,25 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
     switch (metodo.toLowerCase()) {
       case 'dinheiro':
         return 'Dinheiro';
+
       case 'pix':
         return 'Pix';
+
       case 'cartao_credito':
         return 'Crédito';
+
       case 'cartao_debito':
         return 'Débito';
+
       case 'vale_refeicao':
         return 'Vale-refeição';
+
       case 'na_entrega':
         return 'Na entrega';
+
       case 'no_local':
         return 'No local';
+
       default:
         return metodo;
     }
@@ -486,6 +439,7 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
     if (_estaPago(pedido)) return 'Pago';
 
     final pedidoId = pedido['id']?.toString() ?? '';
+
     final metodoDireto =
         pedido['metodo_pagamento']?.toString() ??
         pedido['forma_pagamento']?.toString() ??
@@ -496,6 +450,7 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
     }
 
     final metodoCache = _metodosPagamento[pedidoId];
+
     if (metodoCache != null && metodoCache.isNotEmpty) {
       return 'Pendente • ${_nomeMetodoPagamento(metodoCache)}';
     }
@@ -509,22 +464,27 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
   Future<void> _carregarMetodoPagamentoSobDemanda(String pedidoId) async {
     if (_buscandoMetodoPagamento.contains(pedidoId) ||
-        _metodosPagamento.containsKey(pedidoId)) {
+        _metodosPagamento.containsKey(pedidoId) ||
+        _metodosConsultados.contains(pedidoId)) {
       return;
     }
 
     _buscandoMetodoPagamento.add(pedidoId);
+    _metodosConsultados.add(pedidoId);
 
     try {
       final pagamentos = await _pagamentoRepository.listarPagamentos(pedidoId);
 
       Map<String, dynamic>? escolhido;
+
       for (final pagamento in pagamentos) {
         final status = pagamento['status']?.toString().toLowerCase() ?? '';
+
         if (status == 'pendente') {
           escolhido = pagamento;
           break;
         }
+
         if (escolhido == null && status == 'aprovado') {
           escolhido = pagamento;
         }
@@ -536,20 +496,23 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
       if (metodo != null && metodo.trim().isNotEmpty) {
         _metodosPagamento[pedidoId] = metodo;
+
         if (mounted) setState(() {});
       }
-    } catch (_) {
-      // Mantém somente "Pendente" caso não seja possível consultar o método.
+    } catch (e) {
+      debugPrint('Erro ao consultar pagamento do pedido $pedidoId: $e');
     } finally {
       _buscandoMetodoPagamento.remove(pedidoId);
     }
   }
 
+  // ============================================================
+  // ATUALIZAÇÃO LOCAL DOS PEDIDOS
+  // ============================================================
+
   void _atualizarPedidoLocal(
     String pedidoId, {
-
     String? status,
-
     String? statusPagamento,
   }) {
     if (!mounted) return;
@@ -562,9 +525,7 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
         return <String, dynamic>{
           ...pedido,
-
           if (status != null) 'status': status,
-
           if (statusPagamento != null) 'status_pagamento': statusPagamento,
         };
       }).toList();
@@ -574,35 +535,15 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
   void _finalizarPedidoLocal(String pedidoId) {
     _atualizarPedidoLocal(
       pedidoId,
-
       status: 'concluido',
-
       statusPagamento: 'pago',
     );
   }
 
-  Future<void> _atualizarListaImediatamente() async {
-    try {
-      final lista = await _pedidoRepository.listarPedidos();
-
-      if (!mounted) return;
-
-      setState(() {
-        pedidos = lista;
-
-        erro = null;
-
-        carregando = false;
-      });
-    } catch (e) {
-      debugPrint('Erro ao atualizar lista após ação: $e');
-    }
-  }
+  // A PARTE 2 CONTINUA AQUI
 
   // ============================================================
-
   // AÇÕES DO GERENTE - RETIRADA
-
   // ============================================================
 
   bool _ehRetirada(Map<String, dynamic> pedido) {
@@ -615,10 +556,8 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
     switch (status) {
       case 'em_preparo':
         return 'pronto';
-
       case 'pronto':
         return 'concluido';
-
       default:
         return null;
     }
@@ -628,10 +567,8 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
     switch (_proximoStatusRetirada(pedido)) {
       case 'pronto':
         return 'Marcar como pronto';
-
       case 'concluido':
         return 'Confirmar retirada';
-
       default:
         return '';
     }
@@ -641,10 +578,8 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
     switch (_proximoStatusRetirada(pedido)) {
       case 'pronto':
         return Icons.check_circle_outline;
-
       case 'concluido':
         return Icons.shopping_bag_outlined;
-
       default:
         return Icons.arrow_forward;
     }
@@ -655,91 +590,54 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
     return showDialog<String>(
       context: context,
-
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AlertDialog(
               title: const Text('Pagamento no local'),
-
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-
-                children: [
-                  RadioListTile<String>(
-                    value: 'dinheiro',
-
-                    groupValue: selecionado,
-
-                    title: const Text('Dinheiro'),
-
-                    onChanged: (valor) {
-                      if (valor != null) {
-                        setModalState(() => selecionado = valor);
-                      }
-                    },
-                  ),
-
-                  RadioListTile<String>(
-                    value: 'pix',
-
-                    groupValue: selecionado,
-
-                    title: const Text('Pix'),
-
-                    onChanged: (valor) {
-                      if (valor != null) {
-                        setModalState(() => selecionado = valor);
-                      }
-                    },
-                  ),
-
-                  RadioListTile<String>(
-                    value: 'cartao_credito',
-
-                    groupValue: selecionado,
-
-                    title: const Text('Cartão de crédito'),
-
-                    onChanged: (valor) {
-                      if (valor != null) {
-                        setModalState(() => selecionado = valor);
-                      }
-                    },
-                  ),
-
-                  RadioListTile<String>(
-                    value: 'cartao_debito',
-
-                    groupValue: selecionado,
-
-                    title: const Text('Cartão de débito'),
-
-                    onChanged: (valor) {
-                      if (valor != null) {
-                        setModalState(() => selecionado = valor);
-                      }
-                    },
-                  ),
-                ],
+              content: RadioGroup<String>(
+                groupValue: selecionado,
+                onChanged: (valor) {
+                  if (valor != null) {
+                    setModalState(() {
+                      selecionado = valor;
+                    });
+                  }
+                },
+                child: const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    RadioListTile<String>(
+                      value: 'dinheiro',
+                      title: Text('Dinheiro'),
+                    ),
+                    RadioListTile<String>(value: 'pix', title: Text('Pix')),
+                    RadioListTile<String>(
+                      value: 'cartao_credito',
+                      title: Text('Cartão de crédito'),
+                    ),
+                    RadioListTile<String>(
+                      value: 'cartao_debito',
+                      title: Text('Cartão de débito'),
+                    ),
+                  ],
+                ),
               ),
-
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                  },
                   child: const Text('Cancelar'),
                 ),
-
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
-
                     foregroundColor: Colors.white,
                   ),
-
-                  onPressed: () => Navigator.pop(dialogContext, selecionado),
-
+                  onPressed: () {
+                    Navigator.pop(dialogContext, selecionado);
+                  },
                   child: const Text('Confirmar pagamento'),
                 ),
               ],
@@ -773,17 +671,14 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
   Future<void> _avancarRetirada(Map<String, dynamic> pedido) async {
     final pedidoId = pedido['id']?.toString();
 
-    if (pedidoId == null || pedidoId.isEmpty) return;
+    if (pedidoId == null || pedidoId.isEmpty || atualizando) {
+      return;
+    }
+
+    // Bloqueia outro clique antes da primeira requisição.
+    setState(() => atualizando = true);
 
     try {
-      setState(() => atualizando = true);
-
-      // IMPORTANTE:
-
-      // O card pode estar desatualizado. Sempre consulta o pedido real
-
-      // antes de decidir a próxima transição. Isso evita pronto -> pronto.
-
       var atual = await _pedidoAtualizado(pedidoId);
 
       var statusAtual =
@@ -797,130 +692,100 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
           '';
 
       if (statusAtual == 'concluido' || statusAtual == 'cancelado') {
-        _atualizarListaImediatamente();
-
         return;
       }
 
       // CONFIRMADO -> EM PREPARO
-
       if (statusAtual == 'confirmado') {
         await _pedidoRepository.alterarStatus(
           pedidoId: pedidoId,
-
           status: 'em_preparo',
         );
 
         if (!mounted) return;
 
+        _atualizarPedidoLocal(pedidoId, status: 'em_preparo');
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Pedido enviado para preparo.'),
-
             backgroundColor: Colors.green,
           ),
         );
-
-        _atualizarListaImediatamente();
 
         return;
       }
 
       // EM PREPARO -> PRONTO
-
       if (statusAtual == 'em_preparo') {
         await _pedidoRepository.alterarStatus(
           pedidoId: pedidoId,
-
           status: 'pronto',
         );
 
         if (!mounted) return;
-
-        // Atualiza o card imediatamente, sem depender do botão de atualizar.
 
         _atualizarPedidoLocal(pedidoId, status: 'pronto');
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Pedido marcado como pronto para retirada.'),
-
             backgroundColor: Colors.green,
           ),
         );
 
-        _atualizarListaImediatamente();
-
         return;
       }
-
-      // A partir daqui, só pode finalizar se realmente estiver PRONTO.
 
       if (statusAtual != 'pronto') {
         throw Exception('O pedido ainda não está pronto para retirada.');
       }
 
-      // Revalida pagamentos existentes. O status resumido do card pode
-
-      // estar atrasado em relação ao backend.
-
       final pagamentos = await _pagamentoRepository.listarPagamentos(pedidoId);
 
       Map<String, dynamic>? pagamentoAprovado;
-
       Map<String, dynamic>? pagamentoPendente;
 
-      for (final pagamentoExistente in pagamentos) {
+      for (final pagamento in pagamentos) {
         final statusExistente =
-            pagamentoExistente['status']?.toString().toLowerCase() ?? '';
+            pagamento['status']?.toString().toLowerCase() ?? '';
 
         if (statusExistente == 'aprovado') {
-          pagamentoAprovado = pagamentoExistente;
-
+          pagamentoAprovado = pagamento;
           break;
         }
 
         if (statusExistente == 'pendente') {
-          pagamentoPendente = pagamentoExistente;
+          pagamentoPendente = pagamento;
         }
       }
 
       final jaPago = statusPagamento == 'pago' || pagamentoAprovado != null;
 
       if (jaPago) {
-        // PAGOU PELO APP:
-
-        // não mostra nenhuma forma de pagamento.
-
-        setState(() => atualizando = false);
+        // O pedido já foi pago pelo aplicativo.
+        // Apenas confirma a retirada.
 
         final confirmar = await showDialog<bool>(
           context: context,
-
           builder: (dialogContext) {
             return AlertDialog(
               title: const Text('Confirmar retirada'),
-
               content: const Text(
-                'O pedido já está pago. Confirma que o cliente retirou o pedido?',
+                'O pedido já está pago. '
+                'Confirma que o cliente retirou o pedido?',
               ),
-
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogContext, false),
-
                   child: const Text('Cancelar'),
                 ),
-
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
-
                     foregroundColor: Colors.white,
                   ),
-
                   onPressed: () => Navigator.pop(dialogContext, true),
-
                   child: const Text('Pedido retirado'),
                 ),
               ],
@@ -930,26 +795,17 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
         if (confirmar != true || !mounted) return;
 
-        setState(() => atualizando = true);
-
-        // Consulta mais uma vez antes de concluir para evitar uma
-
-        // transição duplicada caso outra tela tenha atualizado o pedido.
-
+        // Revalida o status antes da finalização.
         atual = await _pedidoAtualizado(pedidoId);
-
         statusAtual = atual['status']?.toString().toLowerCase() ?? statusAtual;
 
         if (statusAtual == 'pronto') {
           await _pedidoRepository.alterarStatus(
             pedidoId: pedidoId,
-
             status: 'concluido',
           );
 
           if (!mounted) return;
-
-          // Sai de "em andamento" e entra em "finalizados" na mesma hora.
 
           _finalizarPedidoLocal(pedidoId);
         }
@@ -959,27 +815,17 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Pedido retirado e finalizado com sucesso.'),
-
             backgroundColor: Colors.green,
           ),
         );
 
-        _atualizarListaImediatamente();
-
         return;
       }
 
-      // PAGAMENTO NO LOCAL:
-
-      // o gerente escolhe a forma de pagamento e só depois finaliza.
-
-      setState(() => atualizando = false);
-
+      // PAGAMENTO NO LOCAL
       final metodo = await _selecionarPagamentoLocal();
 
       if (metodo == null || !mounted) return;
-
-      setState(() => atualizando = true);
 
       String? pagamentoId;
 
@@ -988,7 +834,6 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
       } else {
         final pagamentoCriado = await _pagamentoRepository.criarPagamento(
           pedidoId: pedidoId,
-
           metodo: metodo,
         );
 
@@ -1007,8 +852,6 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
       await _pagamentoRepository.confirmarPagamento(pagamentoId);
 
-      // Confere se o backend realmente marcou como pago.
-
       atual = await _pedidoAtualizado(pedidoId);
 
       statusPagamento =
@@ -1025,13 +868,10 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
       if (statusAtual == 'pronto') {
         await _pedidoRepository.alterarStatus(
           pedidoId: pedidoId,
-
           status: 'concluido',
         );
 
         if (!mounted) return;
-
-        // Atualiza status operacional e financeiro imediatamente.
 
         _finalizarPedidoLocal(pedidoId);
       }
@@ -1040,30 +880,26 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Pagamento confirmado. Pedido retirado e finalizado.'),
-
+          content: Text(
+            'Pagamento confirmado. '
+            'Pedido retirado e finalizado.',
+          ),
           backgroundColor: Colors.green,
         ),
       );
-
-      _atualizarListaImediatamente();
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.toString().replaceFirst('Exception: ', '')),
-
           backgroundColor: Colors.red,
         ),
       );
-
-      // Atualiza o card também em caso de conflito de status.
-
-      _atualizarListaImediatamente();
     } finally {
       if (mounted) {
         setState(() => atualizando = false);
+        await carregarPedidos(silencioso: true);
       }
     }
   }
@@ -1078,15 +914,18 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
   String? _proximoStatusDelivery(Map<String, dynamic> pedido) {
     final status = pedido['status']?.toString().toLowerCase() ?? '';
+
     switch (status) {
       case 'confirmado':
-        return 'pronto';
       case 'em_preparo':
         return 'pronto';
+
       case 'pronto':
         return 'em_entrega';
+
       case 'em_entrega':
         return 'concluido';
+
       default:
         return null;
     }
@@ -1096,10 +935,13 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
     switch (_proximoStatusDelivery(pedido)) {
       case 'pronto':
         return 'Marcar como pronto';
+
       case 'em_entrega':
         return 'Saiu para entrega';
+
       case 'concluido':
         return 'Confirmar entrega';
+
       default:
         return '';
     }
@@ -1109,10 +951,13 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
     switch (_proximoStatusDelivery(pedido)) {
       case 'pronto':
         return Icons.check_circle_outline;
+
       case 'em_entrega':
         return Icons.delivery_dining;
+
       case 'concluido':
         return Icons.task_alt;
+
       default:
         return Icons.arrow_forward;
     }
@@ -1120,37 +965,39 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
   Future<void> _avancarDelivery(Map<String, dynamic> pedido) async {
     final pedidoId = pedido['id']?.toString();
-    if (pedidoId == null || pedidoId.isEmpty) return;
+
+    if (pedidoId == null || pedidoId.isEmpty || atualizando) {
+      return;
+    }
+
+    setState(() => atualizando = true);
 
     try {
-      setState(() => atualizando = true);
-
       var atual = await _pedidoAtualizado(pedidoId);
+
       var statusAtual =
           atual['status']?.toString().toLowerCase() ??
           pedido['status']?.toString().toLowerCase() ??
           '';
 
       if (statusAtual == 'concluido' || statusAtual == 'cancelado') {
-        await _atualizarListaImediatamente();
         return;
       }
 
+      // CONFIRMADO -> EM PREPARO -> PRONTO
       if (statusAtual == 'confirmado') {
         await _pedidoRepository.alterarStatus(
           pedidoId: pedidoId,
           status: 'em_preparo',
         );
 
-        // O gerente usa um único botão "Marcar como pronto".
-        // Como o backend exige a sequência confirmado -> em_preparo -> pronto,
-        // fazemos as duas transições no mesmo clique.
         await _pedidoRepository.alterarStatus(
           pedidoId: pedidoId,
           status: 'pronto',
         );
 
         if (!mounted) return;
+
         _atualizarPedidoLocal(pedidoId, status: 'pronto');
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1160,44 +1007,52 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
           ),
         );
 
-        await _atualizarListaImediatamente();
         return;
       }
 
+      // EM PREPARO -> PRONTO
       if (statusAtual == 'em_preparo') {
         await _pedidoRepository.alterarStatus(
           pedidoId: pedidoId,
           status: 'pronto',
         );
+
         if (!mounted) return;
+
         _atualizarPedidoLocal(pedidoId, status: 'pronto');
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Delivery marcado como pronto.'),
             backgroundColor: Colors.green,
           ),
         );
-        await _atualizarListaImediatamente();
+
         return;
       }
 
+      // PRONTO -> EM ENTREGA
       if (statusAtual == 'pronto') {
         await _pedidoRepository.alterarStatus(
           pedidoId: pedidoId,
           status: 'em_entrega',
         );
+
         if (!mounted) return;
+
         _atualizarPedidoLocal(pedidoId, status: 'em_entrega');
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Pedido saiu para entrega.'),
             backgroundColor: Colors.purple,
           ),
         );
-        await _atualizarListaImediatamente();
+
         return;
       }
 
+      // EM ENTREGA -> CONCLUÍDO
       if (statusAtual == 'em_entrega') {
         final pagamentos = await _pagamentoRepository.listarPagamentos(
           pedidoId,
@@ -1228,70 +1083,80 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
         final jaPago =
             statusPagamentoPedido == 'pago' || pagamentoAprovado != null;
 
-        setState(() => atualizando = false);
-
         final metodoPendente =
             pagamentoPendente?['metodo']?.toString() ??
             pagamentoPendente?['forma_pagamento']?.toString();
 
         final textoConfirmacao = jaPago
-            ? 'O pedido já está pago. Confirma que ele foi entregue ao cliente?'
+            ? 'O pedido já está pago. '
+                  'Confirma que ele foi entregue ao cliente?'
             : metodoPendente != null && metodoPendente.isNotEmpty
-            ? 'Pagamento pendente em ${_nomeMetodoPagamento(metodoPendente)}. Confirma o recebimento e a entrega?'
-            : 'O pagamento está pendente. Confirma o recebimento e a entrega?';
+            ? 'Pagamento pendente em '
+                  '${_nomeMetodoPagamento(metodoPendente)}. '
+                  'Confirma o recebimento e a entrega?'
+            : 'O pagamento está pendente. '
+                  'Confirma o recebimento e a entrega?';
 
         final confirmar = await showDialog<bool>(
           context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Confirmar entrega'),
-            content: Text(textoConfirmacao),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancelar'),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
+          builder: (dialogContext) {
+            return AlertDialog(
+              title: const Text('Confirmar entrega'),
+              content: Text(textoConfirmacao),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancelar'),
                 ),
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: Text(jaPago ? 'Pedido entregue' : 'Receber e entregar'),
-              ),
-            ],
-          ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: Text(
+                    jaPago ? 'Pedido entregue' : 'Receber e entregar',
+                  ),
+                ),
+              ],
+            );
+          },
         );
 
         if (confirmar != true || !mounted) return;
-        setState(() => atualizando = true);
 
-        // Se o cliente escolheu pagar na entrega, confirma exatamente
-        // o pagamento pendente já criado por ele. Não troca a forma.
+        // Se o cliente escolheu pagar na entrega,
+        // confirma o pagamento pendente existente.
         if (!jaPago) {
           final pagamentoId = pagamentoPendente?['id']?.toString();
 
           if (pagamentoId == null || pagamentoId.isEmpty) {
             throw Exception(
-              'Não foi encontrado o pagamento escolhido pelo cliente.',
+              'Não foi encontrado o pagamento '
+              'escolhido pelo cliente.',
             );
           }
 
           await _pagamentoRepository.confirmarPagamento(pagamentoId);
 
           atual = await _pedidoAtualizado(pedidoId);
+
           final novoStatusPagamento =
               atual['status_pagamento']?.toString().toLowerCase() ?? '';
 
           if (novoStatusPagamento != 'pago') {
             throw Exception(
-              'O pagamento ainda não foi confirmado pelo sistema.',
+              'O pagamento ainda não foi confirmado '
+              'pelo sistema.',
             );
           }
 
           _atualizarPedidoLocal(pedidoId, statusPagamento: 'pago');
         }
 
+        // Revalida antes de finalizar.
         atual = await _pedidoAtualizado(pedidoId);
+
         statusAtual = atual['status']?.toString().toLowerCase() ?? statusAtual;
 
         if (statusAtual == 'em_entrega') {
@@ -1301,6 +1166,7 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
           );
 
           if (!mounted) return;
+
           _atualizarPedidoLocal(
             pedidoId,
             status: 'concluido',
@@ -1309,6 +1175,7 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
         }
 
         if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Pedido entregue e finalizado com sucesso.'),
@@ -1316,29 +1183,34 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
           ),
         );
 
-        await _atualizarListaImediatamente();
         return;
       }
 
-      throw Exception('O Delivery não pode avançar a partir deste status.');
+      throw Exception(
+        'O Delivery não pode avançar '
+        'a partir deste status.',
+      );
     } catch (e) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.toString().replaceFirst('Exception: ', '')),
           backgroundColor: Colors.red,
         ),
       );
-      await _atualizarListaImediatamente();
     } finally {
-      if (mounted) setState(() => atualizando = false);
+      if (mounted) {
+        setState(() => atualizando = false);
+        await carregarPedidos(silencioso: true);
+      }
     }
   }
 
+  // A PARTE 3 CONTINUA AQUI
+
   // ============================================================
-
   // DETALHES DO PEDIDO
-
   // ============================================================
 
   Future<void> _abrirDetalhes(Map<String, dynamic> pedido) async {
@@ -1348,11 +1220,9 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
       return;
     }
 
-    showDialog(
+    showDialog<void>(
       context: context,
-
       barrierDismissible: false,
-
       builder: (_) {
         return const Center(
           child: CircularProgressIndicator(color: Colors.green),
@@ -1366,7 +1236,6 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
       if (!mounted) return;
 
       Navigator.pop(context);
-
       _mostrarDetalhes(detalhes);
     } catch (e) {
       if (!mounted) return;
@@ -1374,15 +1243,16 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
       Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
 
   // ============================================================
-
   // MODAL DE DETALHES
-
   // ============================================================
 
   void _mostrarDetalhes(Map<String, dynamic> detalhes) {
@@ -1418,67 +1288,52 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
       }
     }
 
-    final mesa = _nomePedido(pedidoDados);
-
+    final nomePedido = _nomePedido(pedidoDados);
     final total = _formatarDinheiro(pedidoDados['total']);
 
     final status = pedidoDados['status']?.toString().toLowerCase() ?? '';
-    final tipoDetalhe = pedidoDados['tipo']?.toString().toLowerCase() ?? '';
-    final exibirPagamentoDetalhe =
-        tipoDetalhe == 'retirada' || tipoDetalhe == 'delivery';
+
+    final tipo = pedidoDados['tipo']?.toString().toLowerCase() ?? '';
+
+    final exibirPagamento = tipo == 'retirada' || tipo == 'delivery';
 
     showModalBottomSheet(
       context: context,
-
       isScrollControlled: true,
-
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
       ),
-
       builder: (context) {
         return SafeArea(
           child: Padding(
             padding: EdgeInsets.only(
               left: 25,
-
               right: 25,
-
               top: 25,
-
               bottom: MediaQuery.of(context).viewInsets.bottom + 25,
             ),
-
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-
                 crossAxisAlignment: CrossAxisAlignment.start,
-
                 children: [
                   Row(
                     children: [
                       const Icon(Icons.receipt_long, color: Colors.green),
-
                       const SizedBox(width: 10),
-
                       Expanded(
                         child: Text(
-                          mesa,
-
+                          nomePedido,
                           style: const TextStyle(
                             fontSize: 24,
-
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
-
                       IconButton(
                         onPressed: () {
                           Navigator.pop(context);
                         },
-
                         icon: const Icon(Icons.close),
                       ),
                     ],
@@ -1489,28 +1344,22 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
-
                       vertical: 6,
                     ),
-
                     decoration: BoxDecoration(
                       color: _corStatus(status).withValues(alpha: .15),
-
                       borderRadius: BorderRadius.circular(20),
                     ),
-
                     child: Text(
                       _nomeStatus(status),
-
                       style: TextStyle(
                         color: _corStatus(status),
-
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
 
-                  if (exibirPagamentoDetalhe) ...[
+                  if (exibirPagamento) ...[
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -1537,7 +1386,6 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
                   const Text(
                     'Produtos',
-
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
 
@@ -1546,7 +1394,6 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
                   if (itens.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 15),
-
                       child: Text('Nenhum item encontrado.'),
                     ),
 
@@ -1564,38 +1411,26 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 10),
-
                       padding: const EdgeInsets.all(12),
-
                       decoration: BoxDecoration(
                         color: Colors.grey.shade100,
-
                         borderRadius: BorderRadius.circular(12),
                       ),
-
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
-
                         children: [
                           Container(
                             width: 34,
-
                             height: 34,
-
                             alignment: Alignment.center,
-
                             decoration: BoxDecoration(
                               color: Colors.green.shade100,
-
                               borderRadius: BorderRadius.circular(10),
                             ),
-
                             child: Text(
                               '${quantidade}x',
-
                               style: const TextStyle(
                                 color: Colors.green,
-
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -1606,25 +1441,19 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
-
                               children: [
                                 Text(
                                   nome,
-
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-
                                 if (observacao.trim().isNotEmpty) ...[
                                   const SizedBox(height: 3),
-
                                   Text(
                                     observacao,
-
                                     style: TextStyle(
                                       color: Colors.grey.shade600,
-
                                       fontSize: 12,
                                     ),
                                   ),
@@ -1637,10 +1466,8 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
                           Text(
                             _formatarDinheiro(totalItem),
-
                             style: const TextStyle(
                               color: Colors.green,
-
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -1653,26 +1480,19 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-
                     children: [
                       const Text(
                         'Total',
-
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-
                           fontSize: 20,
                         ),
                       ),
-
                       Text(
                         total,
-
                         style: const TextStyle(
                           color: Colors.green,
-
                           fontSize: 22,
-
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -1690,46 +1510,33 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
   }
 
   // ============================================================
-
   // BUILD
-
   // ============================================================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-
       body: SafeArea(
         child: Column(
           children: [
-            // ==================================================
-
             // CABEÇALHO
-
-            // ==================================================
             Container(
               padding: const EdgeInsets.all(20),
-
               decoration: const BoxDecoration(
                 color: Colors.green,
-
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(30),
-
                   bottomRight: Radius.circular(30),
                 ),
               ),
-
               child: Row(
                 children: [
                   IconButton(
                     icon: const Icon(
                       Icons.arrow_back_ios_new,
-
                       color: Colors.white,
                     ),
-
                     onPressed: () {
                       Navigator.pop(context);
                     },
@@ -1738,14 +1545,10 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
                   const Expanded(
                     child: Text(
                       'Pedidos',
-
                       textAlign: TextAlign.center,
-
                       style: TextStyle(
                         color: Colors.white,
-
                         fontSize: 28,
-
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1753,16 +1556,12 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
                   IconButton(
                     tooltip: 'Atualizar',
-
-                    onPressed: () {
-                      carregarPedidos();
-                    },
-
+                    onPressed: _carregandoLista || atualizando
+                        ? null
+                        : () => carregarPedidos(),
                     icon: const Icon(
                       Icons.refresh,
-
                       color: Colors.white,
-
                       size: 30,
                     ),
                   ),
@@ -1772,17 +1571,10 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
             const SizedBox(height: 10),
 
-            // ==================================================
-
-            // CONTEÚDO
-
-            // ==================================================
             Expanded(
               child: RefreshIndicator(
                 color: Colors.green,
-
                 onRefresh: carregarPedidos,
-
                 child: _conteudo(),
               ),
             ),
@@ -1793,19 +1585,15 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
   }
 
   // ============================================================
-
   // CONTEÚDO
-
   // ============================================================
 
   Widget _conteudo() {
     if (carregando && pedidos.isEmpty) {
       return ListView(
-        physics: AlwaysScrollableScrollPhysics(),
-
-        children: [
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
           SizedBox(height: 250),
-
           Center(child: CircularProgressIndicator(color: Colors.green)),
         ],
       );
@@ -1814,34 +1602,21 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
     if (erro != null && pedidos.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-
         padding: const EdgeInsets.all(20),
-
         children: [
           const SizedBox(height: 100),
-
           Icon(Icons.error_outline, size: 50, color: Colors.red.shade400),
-
           const SizedBox(height: 15),
-
           Text(
             erro!,
-
             textAlign: TextAlign.center,
-
             style: const TextStyle(color: Colors.red),
           ),
-
           const SizedBox(height: 10),
-
           Center(
             child: TextButton.icon(
-              onPressed: () {
-                carregarPedidos();
-              },
-
+              onPressed: () => carregarPedidos(),
               icon: const Icon(Icons.refresh),
-
               label: const Text('Tentar novamente'),
             ),
           ),
@@ -1849,42 +1624,32 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
       );
     }
 
+    final emAndamento = pedidosEmAndamento;
+    final finalizados = pedidosFinalizados;
+
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-
       children: [
-        // ======================================================
-
-        // EM ANDAMENTO
-
-        // ======================================================
+        // PEDIDOS EM ANDAMENTO
         Row(
           children: [
             const Expanded(
               child: Text(
                 'Pedidos em andamento',
-
                 style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
               ),
             ),
-
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-
               decoration: BoxDecoration(
                 color: Colors.orange.shade50,
-
                 borderRadius: BorderRadius.circular(20),
               ),
-
               child: Text(
-                '${pedidosEmAndamento.length}',
-
+                '${emAndamento.length}',
                 style: TextStyle(
                   color: Colors.orange.shade800,
-
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1894,49 +1659,37 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
         const SizedBox(height: 15),
 
-        if (pedidosEmAndamento.isEmpty)
+        if (emAndamento.isEmpty)
           _mensagemVazia('Nenhum pedido em andamento.', Icons.receipt_long),
 
-        ...pedidosEmAndamento.map(
+        ...emAndamento.map(
           (pedido) => Padding(
             padding: const EdgeInsets.only(bottom: 15),
-
             child: _pedidoCard(pedido),
           ),
         ),
 
         const SizedBox(height: 20),
 
-        // ======================================================
-
-        // FINALIZADOS
-
-        // ======================================================
+        // PEDIDOS FINALIZADOS
         Row(
           children: [
             const Expanded(
               child: Text(
                 'Pedidos finalizados',
-
                 style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
               ),
             ),
-
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-
               decoration: BoxDecoration(
                 color: Colors.green.shade50,
-
                 borderRadius: BorderRadius.circular(20),
               ),
-
               child: Text(
-                '${pedidosFinalizados.length}',
-
+                '${finalizados.length}',
                 style: const TextStyle(
                   color: Colors.green,
-
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1946,17 +1699,15 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
         const SizedBox(height: 15),
 
-        if (pedidosFinalizados.isEmpty)
+        if (finalizados.isEmpty)
           _mensagemVazia(
             'Nenhum pedido finalizado.',
-
             Icons.check_circle_outline,
           ),
 
-        ...pedidosFinalizados.map(
+        ...finalizados.map(
           (pedido) => Padding(
             padding: const EdgeInsets.only(bottom: 15),
-
             child: _pedidoCard(pedido),
           ),
         ),
@@ -1967,80 +1718,63 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
   }
 
   // ============================================================
-
   // CARD DO PEDIDO
-
   // ============================================================
 
   Widget _pedidoCard(Map<String, dynamic> pedido) {
     final status = pedido['status']?.toString().toLowerCase() ?? '';
 
     final finalizado = status == 'concluido';
-
     final cor = _corStatus(status);
-
-    final mesa = _nomePedido(pedido);
-
+    final nomePedido = _nomePedido(pedido);
     final total = _formatarDinheiro(pedido['total']);
 
     final retirada = _ehRetirada(pedido);
+    final delivery = _ehDelivery(pedido);
 
     final proximoStatusRetirada = retirada
         ? _proximoStatusRetirada(pedido)
         : null;
 
-    final delivery = _ehDelivery(pedido);
     final proximoStatusDelivery = delivery
         ? _proximoStatusDelivery(pedido)
         : null;
 
     return Container(
       padding: const EdgeInsets.all(18),
-
       decoration: BoxDecoration(
         color: finalizado ? Colors.grey.shade100 : Colors.white,
-
         borderRadius: BorderRadius.circular(20),
-
         border: Border.all(
           color: finalizado ? Colors.grey.shade300 : Colors.grey.shade200,
         ),
-
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: .06),
-
             blurRadius: 8,
-
             offset: const Offset(0, 3),
           ),
         ],
       ),
-
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-
         children: [
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(12),
-
                 decoration: BoxDecoration(
                   color: finalizado
                       ? Colors.grey.shade200
                       : Colors.green.shade100,
-
                   borderRadius: BorderRadius.circular(15),
                 ),
-
                 child: Icon(
                   retirada
                       ? Icons.shopping_bag_outlined
                       : delivery
                       ? Icons.delivery_dining
                       : Icons.table_restaurant,
-
                   color: finalizado ? Colors.grey : Colors.green,
                 ),
               ),
@@ -2050,23 +1784,17 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-
                   children: [
                     Text(
-                      mesa,
-
+                      nomePedido,
                       style: const TextStyle(
                         fontSize: 20,
-
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-
                     const SizedBox(height: 3),
-
                     Text(
                       _quantidadeItens(pedido),
-
                       style: const TextStyle(color: Colors.grey),
                     ),
                   ],
@@ -2077,24 +1805,17 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
-
                     vertical: 5,
                   ),
-
                   decoration: BoxDecoration(
                     color: _corPagamento(pedido).withValues(alpha: .15),
-
                     borderRadius: BorderRadius.circular(20),
                   ),
-
                   child: Text(
                     _textoPagamentoComMetodo(pedido),
-
                     style: TextStyle(
                       color: _corPagamento(pedido),
-
                       fontSize: 12,
-
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -2103,19 +1824,14 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
-
                     vertical: 6,
                   ),
-
                   decoration: BoxDecoration(
                     color: cor.withValues(alpha: .15),
-
                     borderRadius: BorderRadius.circular(20),
                   ),
-
                   child: Text(
                     _nomeStatus(status),
-
                     style: TextStyle(color: cor, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -2126,22 +1842,16 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-
             children: [
               const Text(
                 'Total do pedido',
-
                 style: TextStyle(color: Colors.grey),
               ),
-
               Text(
                 total,
-
                 style: TextStyle(
                   color: finalizado ? Colors.grey : Colors.green,
-
                   fontSize: 22,
-
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -2150,25 +1860,21 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
 
           const SizedBox(height: 15),
 
+          // BOTÃO DE RETIRADA
           if (retirada && proximoStatusRetirada != null) ...[
             SizedBox(
               width: double.infinity,
-
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: proximoStatusRetirada == 'concluido'
                       ? Colors.blue
                       : Colors.green,
-
                   foregroundColor: Colors.white,
-
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
                 ),
-
                 icon: Icon(_iconeAcaoRetirada(pedido)),
-
                 label: Text(
                   proximoStatusRetirada == 'concluido'
                       ? (_estaPago(pedido)
@@ -2176,14 +1882,13 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
                             : 'Receber e finalizar')
                       : _textoAcaoRetirada(pedido),
                 ),
-
-                onPressed: () => _avancarRetirada(pedido),
+                onPressed: atualizando ? null : () => _avancarRetirada(pedido),
               ),
             ),
-
             const SizedBox(height: 10),
           ],
 
+          // BOTÃO DE DELIVERY
           if (delivery && proximoStatusDelivery != null) ...[
             SizedBox(
               width: double.infinity,
@@ -2207,26 +1912,21 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
             const SizedBox(height: 10),
           ],
 
+          // BOTÃO VER DETALHES
           SizedBox(
             width: double.infinity,
-
             child: OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 foregroundColor: finalizado ? Colors.grey : Colors.green,
-
                 side: BorderSide(
                   color: finalizado ? Colors.grey : Colors.green,
                 ),
-
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
               ),
-
               icon: const Icon(Icons.visibility),
-
               label: const Text('Ver detalhes'),
-
               onPressed: () {
                 _abrirDetalhes(pedido);
               },
@@ -2238,36 +1938,25 @@ class _PedidosGerenteTelaState extends State<PedidosGerenteTela> {
   }
 
   // ============================================================
-
-  // LISTA VAZIA
-
+  // MENSAGEM DE LISTA VAZIA
   // ============================================================
 
   Widget _mensagemVazia(String mensagem, IconData icone) {
     return Container(
       width: double.infinity,
-
       margin: const EdgeInsets.only(bottom: 10),
-
       padding: const EdgeInsets.all(25),
-
       decoration: BoxDecoration(
         color: Colors.grey.shade100,
-
         borderRadius: BorderRadius.circular(15),
       ),
-
       child: Column(
         children: [
           Icon(icone, color: Colors.grey.shade500, size: 35),
-
           const SizedBox(height: 8),
-
           Text(
             mensagem,
-
             textAlign: TextAlign.center,
-
             style: TextStyle(color: Colors.grey.shade600),
           ),
         ],

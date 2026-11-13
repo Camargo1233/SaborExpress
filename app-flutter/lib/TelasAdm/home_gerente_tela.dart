@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../Repositories/relatorio_repository.dart';
-
 import '../Repositories/pedido_repository.dart';
-
 import '../Repositories/mesa_repository.dart';
 
 class HomeGerenteTela extends StatefulWidget {
@@ -17,162 +14,224 @@ class HomeGerenteTela extends StatefulWidget {
 
 class _HomeGerenteTelaState extends State<HomeGerenteTela> {
   final RelatorioRepository _relatorioRepository = RelatorioRepository();
-
   final PedidoRepository _pedidoRepository = PedidoRepository();
-
   final MesaRepository _mesaRepository = MesaRepository();
 
   bool carregando = true;
-
   String? erro;
 
   int pedidosHoje = 0;
-
   double faturamentoHoje = 0;
-
   String maisVendido = 'Sem vendas';
-
   int unidadesMaisVendido = 0;
-
   int mesasOcupadas = 0;
-
   int totalMesas = 0;
 
-  // ============================================================
-
-  // ATIVIDADES RECENTES
-
-  // ============================================================
-
   List<Map<String, dynamic>> atividadesRecentes = [];
+
+  // ============================================================
+  // CONTROLE DE REQUISIÇÕES
+  // ============================================================
+
+  bool _buscandoDashboard = false;
+  bool _carregouDashboard = false;
+
+  DateTime? _bloqueadoAte;
+
+  List<Map<String, dynamic>> _atividadesMesasCache = [];
+  List<Map<String, dynamic>> _pedidosCache = [];
+  List<Map<String, dynamic>> _mesasCache = [];
 
   @override
   void initState() {
     super.initState();
-
     carregarDashboard();
   }
 
+  bool _erroDeLimite(Object e) {
+    final mensagem = e.toString().toLowerCase();
+
+    return mensagem.contains('429') ||
+        mensagem.contains('muitas requisições') ||
+        mensagem.contains('too many requests');
+  }
+
   // ============================================================
-
   // CARREGAR DASHBOARD
-
   // ============================================================
 
   Future<void> carregarDashboard() async {
-    if (!mounted) return;
+    if (!mounted || _buscandoDashboard) return;
+
+    final agora = DateTime.now();
+
+    if (_bloqueadoAte != null && agora.isBefore(_bloqueadoAte!)) {
+      if (!mounted) return;
+
+      setState(() {
+        erro =
+            'Servidor temporariamente ocupado. '
+            'Aguarde alguns instantes antes de atualizar.';
+      });
+
+      return;
+    }
+
+    _buscandoDashboard = true;
 
     setState(() {
-      carregando = true;
-
+      carregando = !_carregouDashboard;
       erro = null;
     });
 
+    String? aviso;
+    bool limiteAtingido = false;
+
+    void registrarErro(Object e) {
+      debugPrint('Falha ao atualizar painel do gerente: $e');
+
+      if (_erroDeLimite(e)) {
+        limiteAtingido = true;
+
+        _bloqueadoAte = DateTime.now().add(const Duration(seconds: 60));
+
+        aviso =
+            'Muitas requisições. '
+            'Aguarde cerca de 1 minuto '
+            'antes de tentar novamente.';
+      } else {
+        aviso ??= e.toString().replaceFirst('Exception: ', '');
+      }
+    }
+
     try {
-      // Carrega dashboard, atividades das mesas e pedidos
+      // ========================================================
+      // 1. RESUMO DO DASHBOARD
+      // ========================================================
 
-      // de retirada/delivery ao mesmo tempo.
+      try {
+        final dados = Map<String, dynamic>.from(
+          await _relatorioRepository.buscarDashboard(),
+        );
 
-      final resultados = await Future.wait<dynamic>([
-        _relatorioRepository.buscarDashboard(),
+        if (!mounted) return;
 
-        _relatorioRepository.buscarAtividadesRecentes(),
+        final maisVendidoDados = dados['mais_vendido'];
 
-        _pedidoRepository.listarPedidos(),
+        setState(() {
+          pedidosHoje = _paraInt(dados['pedidos_total']);
 
-        _mesaRepository.listarMesas(),
-      ]);
+          faturamentoHoje = _paraDouble(dados['faturamento']);
 
-      final dados = Map<String, dynamic>.from(resultados[0] as Map);
+          mesasOcupadas = _paraInt(dados['mesas_ocupadas']);
 
-      final atividadesMesas = (resultados[1] as List)
-          .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
-          .toList();
+          totalMesas = _paraInt(dados['total_mesas']);
 
-      final pedidos = (resultados[2] as List)
-          .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
-          .toList();
+          if (maisVendidoDados is Map) {
+            maisVendido =
+                maisVendidoDados['produto_nome']?.toString() ?? 'Sem vendas';
 
-      final mesas = (resultados[3] as List)
-          .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
-          .toList();
+            unidadesMaisVendido = _paraInt(maisVendidoDados['unidades']);
+          } else {
+            maisVendido = 'Sem vendas';
+            unidadesMaisVendido = 0;
+          }
+        });
 
-      final atividades = _montarAtividadesRecentes(
-        atividadesMesas,
+        _carregouDashboard = true;
+      } catch (e) {
+        registrarErro(e);
+      }
 
-        pedidos,
+      // ========================================================
+      // 2. ATIVIDADES RECENTES DAS MESAS
+      // ========================================================
 
-        mesas,
-      );
-
-      final maisVendidoDados = dados['mais_vendido'];
-
-      if (!mounted) return;
-
-      setState(() {
-        pedidosHoje = _paraInt(dados['pedidos_total']);
-
-        faturamentoHoje = _paraDouble(dados['faturamento']);
-
-        mesasOcupadas = _paraInt(dados['mesas_ocupadas']);
-
-        totalMesas = _paraInt(dados['total_mesas']);
-
-        if (maisVendidoDados is Map) {
-          maisVendido =
-              maisVendidoDados['produto_nome']?.toString() ?? 'Sem vendas';
-
-          unidadesMaisVendido = _paraInt(maisVendidoDados['unidades']);
-        } else {
-          maisVendido = 'Sem vendas';
-
-          unidadesMaisVendido = 0;
+      if (!limiteAtingido) {
+        try {
+          _atividadesMesasCache =
+              (await _relatorioRepository.buscarAtividadesRecentes())
+                  .whereType<Map>()
+                  .map((item) => Map<String, dynamic>.from(item))
+                  .toList();
+        } catch (e) {
+          registrarErro(e);
         }
+      }
 
-        atividadesRecentes = atividades;
+      // ========================================================
+      // 3. PEDIDOS DE MESA, RETIRADA E DELIVERY
+      // ========================================================
 
-        carregando = false;
-      });
-    } catch (e) {
-      debugPrint('Erro ao carregar dashboard: $e');
+      if (!limiteAtingido) {
+        try {
+          _pedidosCache = (await _pedidoRepository.listarPedidos())
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList();
+        } catch (e) {
+          registrarErro(e);
+        }
+      }
+
+      // ========================================================
+      // 4. MESAS
+      // ========================================================
+
+      if (!limiteAtingido) {
+        try {
+          _mesasCache = (await _mesaRepository.listarMesas())
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList();
+        } catch (e) {
+          registrarErro(e);
+        }
+      }
+
+      // ========================================================
+      // ATUALIZAR ATIVIDADES COM DADOS DISPONÍVEIS
+      // ========================================================
 
       if (!mounted) return;
 
       setState(() {
-        erro = e.toString().replaceFirst('Exception: ', '');
+        atividadesRecentes = _montarAtividadesRecentes(
+          _atividadesMesasCache,
+          _pedidosCache,
+          _mesasCache,
+        );
 
-        carregando = false;
+        erro = aviso;
       });
+    } finally {
+      _buscandoDashboard = false;
+
+      if (mounted) {
+        setState(() {
+          carregando = false;
+        });
+      }
     }
   }
 
   // ============================================================
-
   // ATIVIDADES RECENTES - MESAS + RETIRADA + DELIVERY
-
   // ============================================================
 
   List<Map<String, dynamic>> _montarAtividadesRecentes(
     List<Map<String, dynamic>> atividadesMesas,
-
     List<Map<String, dynamic>> pedidos,
-
     List<Map<String, dynamic>> mesas,
   ) {
     final atividades = <Map<String, dynamic>>[];
-
     final sessoesMesaJaListadas = <String>{};
 
-    // Atividades registradas pelo backend para abertura/fechamento de mesa.
-
+    // Atividades de abertura e fechamento de mesa.
     for (final atividade in atividadesMesas) {
       final item = Map<String, dynamic>.from(atividade);
 
       item['_origem'] = 'mesa';
-
       item['_data_atividade'] = _dataAtividade(item);
 
       final sessaoId =
@@ -186,12 +245,8 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
       atividades.add(item);
     }
 
-    // Mostra TODOS os tipos de pedido: mesa, retirada e delivery.
-
-    // A forma de pagamento não interfere: pago no app ou no local
-
-    // continua aparecendo nas atividades recentes.
-
+    // Pedidos de mesa, retirada e delivery.
+    // A forma de pagamento não interfere na listagem.
     for (final pedido in pedidos) {
       final tipo = pedido['tipo']?.toString().toLowerCase() ?? '';
 
@@ -202,18 +257,14 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
       final item = Map<String, dynamic>.from(pedido);
 
       item['_origem'] = tipo;
-
       item['_atividade_pedido'] = true;
-
       item['_data_atividade'] = _dataAtividade(item);
 
       atividades.add(item);
     }
 
-    // Garante que uma mesa atualmente ocupada/reservada apareça mesmo
-
-    // quando o endpoint de atividades não devolver o evento de abertura.
-
+    // Inclui mesas ocupadas que ainda não apareceram
+    // nas atividades devolvidas pelo backend.
     for (final mesa in mesas) {
       final status = mesa['status']?.toString().toLowerCase() ?? '';
 
@@ -235,15 +286,10 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
       final item = <String, dynamic>{
         ...mesa,
-
         '_origem': 'mesa',
-
         '_mesa_atual': true,
-
         'tipo': 'aberta',
-
         'mesa_numero': mesa['numero'] ?? mesa['mesa_numero'],
-
         'sessao_id': sessaoId,
       };
 
@@ -252,17 +298,14 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
       atividades.add(item);
     }
 
+    // Ordena as atividades da mais recente para a antiga.
     atividades.sort((a, b) {
       final dataA = a['_data_atividade'] as DateTime?;
 
       final dataB = b['_data_atividade'] as DateTime?;
 
-      // Itens atuais sem timestamp (ex.: mesa ocupada) continuam visíveis.
-
       if (dataA == null && dataB == null) return 0;
-
       if (dataA == null) return 1;
-
       if (dataB == null) return -1;
 
       return dataB.compareTo(dataA);
@@ -270,6 +313,10 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
     return atividades.take(30).toList();
   }
+
+  // ============================================================
+  // DATA DA ATIVIDADE
+  // ============================================================
 
   DateTime? _dataAtividade(Map<String, dynamic> item) {
     final valor =
@@ -289,6 +336,10 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
     return DateTime.tryParse(valor.toString())?.toLocal();
   }
+
+  // ============================================================
+  // STATUS DO PEDIDO
+  // ============================================================
 
   String _statusPedido(Map<String, dynamic> pedido) {
     return (pedido['status'] ?? '').toString().toLowerCase();
@@ -322,6 +373,10 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
     }
   }
 
+  // ============================================================
+  // NÚMERO DO PEDIDO
+  // ============================================================
+
   String _numeroPedido(Map<String, dynamic> pedido) {
     final codigo = pedido['codigo']?.toString().trim() ?? '';
 
@@ -337,6 +392,10 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
     return id.length > 8 ? id.substring(0, 8) : id;
   }
+
+  // ============================================================
+  // HORÁRIO DAS ATIVIDADES
+  // ============================================================
 
   String _formatarHorarioAtividade(DateTime? data) {
     if (data == null) return '';
@@ -359,10 +418,10 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
         '${data.month.toString().padLeft(2, '0')} às $hora';
   }
 
+  // A PARTE 2 CONTINUA AQUI
+
   // ============================================================
-
   // CONVERSÕES
-
   // ============================================================
 
   int _paraInt(dynamic valor) {
@@ -398,16 +457,13 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
   }
 
   // ============================================================
-
   // FORMATAÇÃO DE DINHEIRO
-
   // ============================================================
 
   String _formatarDinheiro(double valor) {
     final partes = valor.toStringAsFixed(2).split('.');
 
     final inteiro = partes[0];
-
     final decimal = partes[1];
 
     final buffer = StringBuffer();
@@ -426,37 +482,28 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
   }
 
   // ============================================================
-
   // SAIR
-
   // ============================================================
 
   Future<void> _sair() async {
     final confirmar = await showDialog<bool>(
       context: context,
-
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Sair'),
-
           content: const Text('Deseja realmente sair da conta?'),
-
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.pop(dialogContext, false);
               },
-
               child: const Text('Cancelar'),
             ),
-
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-
               onPressed: () {
                 Navigator.pop(dialogContext, true);
               },
-
               child: const Text('Sair', style: TextStyle(color: Colors.white)),
             ),
           ],
@@ -471,19 +518,12 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
     final prefs = await SharedPreferences.getInstance();
 
     await prefs.remove('token');
-
     await prefs.remove('email_login');
-
     await prefs.remove('usuario_id');
-
     await prefs.remove('usuario_nome');
-
     await prefs.remove('usuario_email');
-
     await prefs.remove('perfil');
-
     await prefs.remove('restaurante_slug');
-
     await prefs.remove('restaurante_id');
 
     if (!mounted) return;
@@ -492,49 +532,36 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
   }
 
   // ============================================================
-
   // BUILD
-
   // ============================================================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-
       body: SafeArea(
         child: Column(
           children: [
             // ==================================================
-
             // CABEÇALHO
-
             // ==================================================
             Container(
               padding: const EdgeInsets.all(20),
-
               decoration: const BoxDecoration(
                 color: Colors.green,
-
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(30),
-
                   bottomRight: Radius.circular(30),
                 ),
               ),
-
               child: Row(
                 children: [
                   const CircleAvatar(
                     radius: 28,
-
                     backgroundColor: Colors.white,
-
                     child: Icon(
                       Icons.admin_panel_settings,
-
                       color: Colors.green,
-
                       size: 35,
                     ),
                   ),
@@ -544,23 +571,17 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
                   const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-
                       children: [
                         Text(
                           'Olá, Gerente',
-
                           style: TextStyle(
                             color: Colors.white,
-
                             fontSize: 22,
-
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-
                         Text(
                           'Painel Administrativo',
-
                           style: TextStyle(color: Colors.white70, fontSize: 15),
                         ),
                       ],
@@ -568,29 +589,23 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
                   ),
 
                   IconButton(
-                    onPressed: carregarDashboard,
-
+                    onPressed: carregando || _buscandoDashboard
+                        ? null
+                        : carregarDashboard,
                     tooltip: 'Atualizar',
-
                     icon: const Icon(
                       Icons.refresh,
-
                       color: Colors.white,
-
                       size: 28,
                     ),
                   ),
 
                   IconButton(
                     onPressed: _sair,
-
                     tooltip: 'Sair',
-
                     icon: const Icon(
                       Icons.logout,
-
                       color: Colors.white,
-
                       size: 30,
                     ),
                   ),
@@ -601,59 +616,42 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
             const SizedBox(height: 20),
 
             // ==================================================
-
             // CONTEÚDO
-
             // ==================================================
             Expanded(
               child: RefreshIndicator(
                 onRefresh: carregarDashboard,
-
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-
                   padding: const EdgeInsets.all(20),
-
                   child: Column(
                     children: [
                       // ========================================
-
                       // CARREGANDO
-
                       // ========================================
                       if (carregando)
                         const Padding(
                           padding: EdgeInsets.only(bottom: 20),
-
                           child: LinearProgressIndicator(color: Colors.green),
                         ),
 
                       // ========================================
-
                       // ERRO
-
                       // ========================================
                       if (erro != null)
                         Container(
                           width: double.infinity,
-
                           margin: const EdgeInsets.only(bottom: 20),
-
                           padding: const EdgeInsets.all(15),
-
                           decoration: BoxDecoration(
                             color: Colors.red.shade50,
-
                             borderRadius: BorderRadius.circular(15),
-
                             border: Border.all(color: Colors.red.shade200),
                           ),
-
                           child: Column(
                             children: [
                               const Icon(
                                 Icons.error_outline,
-
                                 color: Colors.red,
                               ),
 
@@ -661,19 +659,17 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
                               Text(
                                 erro!,
-
                                 textAlign: TextAlign.center,
-
                                 style: const TextStyle(color: Colors.red),
                               ),
 
                               const SizedBox(height: 10),
 
                               TextButton.icon(
-                                onPressed: carregarDashboard,
-
+                                onPressed: _buscandoDashboard
+                                    ? null
+                                    : carregarDashboard,
                                 icon: const Icon(Icons.refresh),
-
                                 label: const Text('Tentar novamente'),
                               ),
                             ],
@@ -681,23 +677,18 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
                         ),
 
                       // ========================================
-
                       // INDICADORES
-
                       // ========================================
                       Row(
                         children: [
                           _cardInfo(
                             Icons.receipt_long,
-
                             'Pedidos',
-
-                            carregando ? '...' : '$pedidosHoje',
-
+                            carregando && !_carregouDashboard
+                                ? '...'
+                                : '$pedidosHoje',
                             subtitulo: 'Hoje',
-
                             corPrincipal: const Color(0xFFFFA000),
-
                             corFundo: const Color(0xFFFFF0C7),
                           ),
 
@@ -705,17 +696,12 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
                           _cardInfo(
                             Icons.attach_money,
-
                             'Faturamento',
-
-                            carregando
+                            carregando && !_carregouDashboard
                                 ? '...'
                                 : _formatarDinheiro(faturamentoHoje),
-
                             subtitulo: 'Hoje',
-
                             corPrincipal: const Color(0xFFE92D35),
-
                             corFundo: const Color(0xFFFFDDE0),
                           ),
                         ],
@@ -727,17 +713,14 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
                         children: [
                           _cardInfo(
                             Icons.local_pizza,
-
                             'Mais vendido',
-
-                            carregando ? '...' : maisVendido,
-
+                            carregando && !_carregouDashboard
+                                ? '...'
+                                : maisVendido,
                             subtitulo: unidadesMaisVendido > 0
                                 ? '$unidadesMaisVendido vendidos na semana'
                                 : 'Últimos 7 dias',
-
                             corPrincipal: const Color(0xFF079447),
-
                             corFundo: const Color(0xFFDDF3E3),
                           ),
 
@@ -745,17 +728,14 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
                           _cardInfo(
                             Icons.table_restaurant,
-
                             'Mesas',
-
-                            carregando ? '...' : '$mesasOcupadas ocupadas',
-
+                            carregando && !_carregouDashboard
+                                ? '...'
+                                : '$mesasOcupadas ocupadas',
                             subtitulo: totalMesas > 0
                                 ? '$mesasOcupadas de $totalMesas'
                                 : 'Nenhuma mesa',
-
                             corPrincipal: const Color(0xFF6947D4),
-
                             corFundo: const Color(0xFFE9E2FA),
                           ),
                         ],
@@ -764,21 +744,14 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
                       const SizedBox(height: 30),
 
                       // ========================================
-
                       // MENU
-
                       // ========================================
                       _botaoMenu(
                         context,
-
                         'Gerenciar Pedidos',
-
                         Icons.receipt,
-
                         '/adm/pedidos',
-
                         const Color(0xFF63B977),
-
                         const Color(0xFFE7F5EA),
                       ),
 
@@ -786,15 +759,10 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
                       _botaoMenu(
                         context,
-
                         'Gerenciar Cardápio',
-
                         Icons.restaurant_menu,
-
                         '/adm/cardapio',
-
                         const Color(0xFFE87979),
-
                         const Color(0xFFFFEAEA),
                       ),
 
@@ -802,34 +770,24 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
                       _botaoMenu(
                         context,
-
                         'Relatórios',
-
                         Icons.bar_chart,
-
                         '/adm/relatorios',
-
                         const Color(0xFFE8A936),
-
                         const Color(0xFFFFF3D8),
                       ),
 
                       const SizedBox(height: 35),
 
                       // ========================================
-
                       // ATIVIDADES RECENTES
-
                       // ========================================
                       const Align(
                         alignment: Alignment.centerLeft,
-
                         child: Text(
                           'Atividades recentes',
-
                           style: TextStyle(
                             fontSize: 22,
-
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -856,53 +814,37 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
   }
 
   // ============================================================
-
   // CARD DE INFORMAÇÃO
-
   // ============================================================
 
   Widget _cardInfo(
     IconData icon,
-
     String titulo,
-
     String valor, {
-
     String? subtitulo,
-
     required Color corPrincipal,
-
     required Color corFundo,
   }) {
     final pedidos = titulo == 'Pedidos';
-
     final faturamento = titulo == 'Faturamento';
-
     final vendido = titulo == 'Mais vendido';
-
     final mesas = titulo == 'Mesas';
 
     return Expanded(
       child: Container(
         height: 176,
-
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
-
           boxShadow: [
             BoxShadow(
               color: corPrincipal.withValues(alpha: 0.10),
-
               blurRadius: 18,
-
               offset: const Offset(0, 8),
             ),
           ],
         ),
-
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
-
           child: Stack(
             children: [
               Positioned.fill(
@@ -910,9 +852,7 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
-
                       end: Alignment.bottomRight,
-
                       colors: [Colors.white, corFundo.withValues(alpha: 0.94)],
                     ),
                   ),
@@ -920,125 +860,54 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
               ),
 
               // Formas decorativas do fundo.
-
-              // No card de Pedidos, as curvas ficam no canto SUPERIOR DIREITO,
-
-              // seguindo a mesma composição visual do card Faturamento.
-              if (pedidos) ...[
-                Positioned(
-                  top: -38,
-
-                  right: -30,
-
-                  child: Transform.rotate(
-                    angle: 0.35,
-
-                    child: Container(
-                      width: 132,
-
-                      height: 78,
-
-                      decoration: BoxDecoration(
-                        color: corPrincipal.withValues(alpha: 0.18),
-
-                        borderRadius: BorderRadius.circular(60),
-                      ),
+              Positioned(
+                top: -38,
+                right: -30,
+                child: Transform.rotate(
+                  angle: 0.35,
+                  child: Container(
+                    width: 132,
+                    height: 78,
+                    decoration: BoxDecoration(
+                      color: corPrincipal.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(60),
                     ),
                   ),
                 ),
+              ),
 
-                Positioned(
-                  top: -52,
-
-                  right: 18,
-
-                  child: Transform.rotate(
-                    angle: 0.35,
-
-                    child: Container(
-                      width: 105,
-
-                      height: 66,
-
-                      decoration: BoxDecoration(
-                        color: corPrincipal.withValues(alpha: 0.09),
-
-                        borderRadius: BorderRadius.circular(60),
-                      ),
+              Positioned(
+                top: -52,
+                right: 18,
+                child: Transform.rotate(
+                  angle: 0.35,
+                  child: Container(
+                    width: 105,
+                    height: 66,
+                    decoration: BoxDecoration(
+                      color: corPrincipal.withValues(alpha: 0.09),
+                      borderRadius: BorderRadius.circular(60),
                     ),
                   ),
                 ),
-              ] else ...[
-                Positioned(
-                  top: -38,
-
-                  right: -30,
-
-                  child: Transform.rotate(
-                    angle: 0.35,
-
-                    child: Container(
-                      width: 132,
-
-                      height: 78,
-
-                      decoration: BoxDecoration(
-                        color: corPrincipal.withValues(alpha: 0.18),
-
-                        borderRadius: BorderRadius.circular(60),
-                      ),
-                    ),
-                  ),
-                ),
-
-                Positioned(
-                  top: -52,
-
-                  right: 18,
-
-                  child: Transform.rotate(
-                    angle: 0.35,
-
-                    child: Container(
-                      width: 105,
-
-                      height: 66,
-
-                      decoration: BoxDecoration(
-                        color: corPrincipal.withValues(alpha: 0.09),
-
-                        borderRadius: BorderRadius.circular(60),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
 
               if (pedidos) ...[
                 Positioned(
-                  right: 14, // ← ALTERADO: era left: 14
-
+                  right: 14,
                   bottom: 13,
-
                   child: Icon(
                     Icons.restaurant_menu,
-
                     size: 27,
-
                     color: corPrincipal.withValues(alpha: 0.24),
                   ),
                 ),
-
                 Positioned(
                   right: 13,
-
                   top: 14,
-
                   child: Icon(
                     Icons.eco_outlined,
-
                     size: 22,
-
                     color: corPrincipal.withValues(alpha: 0.22),
                   ),
                 ),
@@ -1047,31 +916,21 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
               if (faturamento) ...[
                 Positioned(
                   right: 16,
-
                   bottom: 18,
-
                   child: Icon(
                     Icons.currency_exchange,
-
                     size: 28,
-
                     color: corPrincipal.withValues(alpha: 0.18),
                   ),
                 ),
-
                 Positioned(
                   left: 17,
-
                   bottom: 14,
-
                   child: Text(
                     '•••',
-
                     style: TextStyle(
                       letterSpacing: 3,
-
                       color: corPrincipal.withValues(alpha: 0.25),
-
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -1081,14 +940,10 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
               if (vendido)
                 Positioned(
                   right: 15,
-
                   bottom: 14,
-
                   child: Icon(
                     Icons.eco,
-
                     size: 29,
-
                     color: corPrincipal.withValues(alpha: 0.20),
                   ),
                 ),
@@ -1096,46 +951,33 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
               if (mesas)
                 Positioned(
                   right: 12,
-
                   bottom: 10,
-
                   child: Icon(
                     Icons.chair_alt_outlined,
-
                     size: 34,
-
                     color: corPrincipal.withValues(alpha: 0.20),
                   ),
                 ),
 
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 15, 13, 13),
-
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-
                   children: [
                     Container(
                       width: 51,
-
                       height: 51,
-
                       decoration: BoxDecoration(
                         color: corPrincipal,
-
                         borderRadius: BorderRadius.circular(15),
-
                         boxShadow: [
                           BoxShadow(
                             color: corPrincipal.withValues(alpha: 0.24),
-
                             blurRadius: 9,
-
                             offset: const Offset(0, 4),
                           ),
                         ],
                       ),
-
                       child: Icon(icon, color: Colors.white, size: 29),
                     ),
 
@@ -1143,16 +985,11 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
                     Text(
                       titulo,
-
                       maxLines: 1,
-
                       overflow: TextOverflow.ellipsis,
-
                       style: const TextStyle(
                         color: Color(0xFF262626),
-
                         fontSize: 15,
-
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -1161,37 +998,25 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
                     Text(
                       valor,
-
                       maxLines: vendido ? 2 : 1,
-
                       overflow: TextOverflow.ellipsis,
-
                       style: TextStyle(
                         color: corPrincipal,
-
                         fontSize: vendido ? 14 : 18,
-
                         fontWeight: FontWeight.w900,
-
                         height: 1.05,
                       ),
                     ),
 
                     if (subtitulo != null) ...[
                       const SizedBox(height: 4),
-
                       Text(
                         subtitulo,
-
                         maxLines: 1,
-
                         overflow: TextOverflow.ellipsis,
-
                         style: const TextStyle(
                           color: Color(0xFF6E6E6E),
-
                           fontSize: 10.5,
-
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -1207,69 +1032,48 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
   }
 
   // ============================================================
-
   // BOTÃO DO MENU
-
   // ============================================================
 
   Widget _botaoMenu(
     BuildContext context,
-
     String texto,
-
     IconData icon,
-
     String rota,
-
     Color cor,
-
     Color corFundo,
   ) {
     return SizedBox(
       width: double.infinity,
-
       height: 62,
-
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           backgroundColor: corFundo,
-
           foregroundColor: cor,
-
           elevation: 0,
-
           shadowColor: Colors.transparent,
-
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
-
             side: BorderSide(color: cor.withValues(alpha: 0.18)),
           ),
-
           padding: const EdgeInsets.symmetric(horizontal: 22),
         ),
-
         onPressed: () async {
           await Navigator.pushNamed(context, rota);
 
           if (mounted) {
-            carregarDashboard();
+            await carregarDashboard();
           }
         },
-
         child: Row(
           children: [
             Container(
               width: 40,
-
               height: 40,
-
               decoration: BoxDecoration(
                 color: cor.withValues(alpha: 0.13),
-
                 borderRadius: BorderRadius.circular(12),
               ),
-
               child: Icon(icon, color: cor, size: 22),
             ),
 
@@ -1278,12 +1082,9 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
             Expanded(
               child: Text(
                 texto,
-
                 style: TextStyle(
                   color: cor,
-
                   fontSize: 17,
-
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -1296,10 +1097,10 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
     );
   }
 
+  // A PARTE 3 CONTINUA AQUI
+
   // ============================================================
-
   // CARD DE ATIVIDADE
-
   // ============================================================
 
   Widget _cardAtividade(Map<String, dynamic> atividade) {
@@ -1310,9 +1111,13 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
     final atividadePedido = atividade['_atividade_pedido'] == true;
 
+    // ==========================================================
+    // ATIVIDADES DE PEDIDOS
+    // MESA, RETIRADA E DELIVERY
+    // ==========================================================
+
     if (atividadePedido || origem == 'retirada' || origem == 'delivery') {
       final status = _statusPedido(atividade);
-
       final numero = _numeroPedido(atividade);
 
       final valor = _paraDouble(
@@ -1323,34 +1128,30 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
       );
 
       final bool retirada = origem == 'retirada';
-
       final bool delivery = origem == 'delivery';
-
       final bool mesaPedido = origem == 'mesa';
 
       Color cor;
-
       IconData icone;
+
+      // ========================================================
+      // COR E ÍCONE DO STATUS
+      // ========================================================
 
       if (status == 'cancelado') {
         cor = Colors.red;
-
         icone = Icons.cancel_outlined;
       } else if (status == 'concluido') {
         cor = Colors.green;
-
         icone = Icons.check_circle;
       } else if (status == 'pronto') {
         cor = Colors.blue;
-
         icone = Icons.done_all;
       } else if (status == 'em_entrega') {
         cor = Colors.blue;
-
         icone = Icons.delivery_dining;
       } else if (status == 'em_preparo') {
         cor = Colors.orange;
-
         icone = Icons.restaurant;
       } else {
         cor = Colors.orange;
@@ -1361,6 +1162,10 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
             ? Icons.delivery_dining
             : Icons.table_restaurant;
       }
+
+      // ========================================================
+      // IDENTIFICAR O TIPO DO PEDIDO
+      // ========================================================
 
       String tituloTipo;
 
@@ -1379,31 +1184,43 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
         tituloTipo = 'Pedido';
       }
 
+      // ========================================================
+      // TÍTULO DA ATIVIDADE
+      // ========================================================
+
       final titulo = numero.isEmpty
           ? '$tituloTipo - ${_textoStatus(status)}'
           : '$tituloTipo - Pedido $numero - ${_textoStatus(status)}';
 
+      // ========================================================
+      // DESCRIÇÃO
+      // ========================================================
+
+      final horario = _formatarHorarioAtividade(data);
+
       final partes = <String>[
         if (valor > 0) _formatarDinheiro(valor),
-
-        if (_formatarHorarioAtividade(data).isNotEmpty)
-          _formatarHorarioAtividade(data),
+        if (horario.isNotEmpty) horario,
       ];
 
       return _atividadeContainer(
         cor: cor,
-
         icone: icone,
-
         titulo: titulo,
-
         descricao: partes.isEmpty ? 'Pedido atualizado' : partes.join(' • '),
       );
     }
 
-    final tipo = atividade['tipo']?.toString() ?? '';
+    // ==========================================================
+    // ATIVIDADES DE ABERTURA E FECHAMENTO DE MESAS
+    // ==========================================================
 
-    final numeroMesa = atividade['mesa_numero']?.toString() ?? '';
+    final tipo = atividade['tipo']?.toString().toLowerCase() ?? '';
+
+    final numeroMesa =
+        atividade['mesa_numero']?.toString() ??
+        atividade['numero']?.toString() ??
+        '';
 
     final valor = _paraDouble(atividade['valor']);
 
@@ -1424,75 +1241,65 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
     final String descricao = fechada
         ? [
             _formatarDinheiro(valor),
-
             if (horario.isNotEmpty) horario,
           ].join(' • ')
         : ['Conta em andamento', if (horario.isNotEmpty) horario].join(' • ');
 
     return _atividadeContainer(
       cor: cor,
-
       icone: icone,
-
       titulo: titulo,
-
       descricao: descricao,
     );
   }
 
+  // ============================================================
+  // DESIGN DO CARD DE ATIVIDADE
+  // ============================================================
+
   Widget _atividadeContainer({
     required Color cor,
-
     required IconData icone,
-
     required String titulo,
-
     required String descricao,
   }) {
     return Container(
       width: double.infinity,
-
       margin: const EdgeInsets.only(bottom: 12),
-
       padding: const EdgeInsets.all(15),
-
       decoration: BoxDecoration(
         color: cor.withValues(alpha: 0.08),
-
         borderRadius: BorderRadius.circular(15),
-
         border: Border.all(color: cor.withValues(alpha: 0.25)),
       ),
-
       child: Row(
         children: [
+          // ====================================================
+          // ÍCONE DA ATIVIDADE
+          // ====================================================
           Container(
             width: 46,
-
             height: 46,
-
             decoration: BoxDecoration(
               color: cor.withValues(alpha: 0.12),
-
               shape: BoxShape.circle,
             ),
-
             child: Icon(icone, color: cor),
           ),
 
           const SizedBox(width: 14),
 
+          // ====================================================
+          // INFORMAÇÕES DA ATIVIDADE
+          // ====================================================
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-
               children: [
                 Text(
                   titulo,
-
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-
                     fontSize: 15,
                   ),
                 ),
@@ -1501,7 +1308,6 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
                 Text(
                   descricao,
-
                   style: TextStyle(color: cor, fontWeight: FontWeight.w500),
                 ),
               ],
@@ -1515,23 +1321,17 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
   }
 
   // ============================================================
-
-  // NENHUMA ATIVIDADE
-
+  // NENHUMA ATIVIDADE RECENTE
   // ============================================================
 
   Widget _nenhumaAtividade() {
     return Container(
       width: double.infinity,
-
       padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
-
       decoration: BoxDecoration(
         color: Colors.grey.shade100,
-
         borderRadius: BorderRadius.circular(15),
       ),
-
       child: Column(
         children: [
           Icon(Icons.notifications_none, size: 40, color: Colors.grey.shade500),
@@ -1540,10 +1340,8 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
           Text(
             'Nenhuma atividade recente',
-
             style: TextStyle(
               color: Colors.grey.shade700,
-
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -1551,10 +1349,9 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
           const SizedBox(height: 4),
 
           Text(
-            'As movimentações de mesas, retiradas e deliveries aparecerão aqui.',
-
+            'As movimentações de mesas, retiradas '
+            'e deliveries aparecerão aqui.',
             textAlign: TextAlign.center,
-
             style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
           ),
         ],

@@ -1,3 +1,4 @@
+
 const AppError = require('../../utils/AppError');
 
 /**
@@ -5,52 +6,154 @@ const AppError = require('../../utils/AppError');
  * Maquina de estados do PEDIDO (ciclo de producao)
  * =====================================================================
  *
- *   rascunho ──confirmar──> confirmado ──> em_preparo ──> pronto
- *                                                          │
- *                             (delivery) ──> em_entrega ────┤
- *                                                          v
- *                                                      concluido
+ * rascunho
+ *    |
+ *    v
+ * aguardando_confirmacao
+ *    |
+ *    | Confirmacao exclusiva do gerente
+ *    v
+ * confirmado
+ *    |
+ *    v
+ * em_preparo
+ *    |
+ *    v
+ * pronto
+ *    |
+ *    |-- Delivery --> em_entrega --> concluido
+ *    |
+ *    |-- Mesa/Retirada ------------> concluido
  *
- *   Qualquer estado nao final pode ir para "cancelado".
- *   "concluido" e "cancelado" sao FINAIS: nao saem mais de la.
+ * Qualquer estado nao final pode ir para "cancelado".
  *
- * O status financeiro (status_pagamento) e independente e vive em
- * pedidos.status_pagamento -- ver modulo pagamentos.
+ * "concluido" e "cancelado" sao estados finais.
+ *
+ * O status financeiro (status_pagamento) e independente
+ * do status de producao do pedido.
+ *
+ * =====================================================================
  */
+
 const TRANSICOES = Object.freeze({
-  rascunho: ['confirmado', 'cancelado'],
-  confirmado: ['em_preparo', 'cancelado'],
-  em_preparo: ['pronto', 'cancelado'],
-  pronto: ['em_entrega', 'concluido', 'cancelado'],
-  em_entrega: ['concluido', 'cancelado'],
+  rascunho: [
+    'aguardando_confirmacao',
+    'cancelado',
+  ],
+
+  aguardando_confirmacao: [
+    'confirmado',
+    'cancelado',
+  ],
+
+  confirmado: [
+    'em_preparo',
+    'cancelado',
+  ],
+
+  em_preparo: [
+    'pronto',
+    'cancelado',
+  ],
+
+  pronto: [
+    'em_entrega',
+    'concluido',
+    'cancelado',
+  ],
+
+  em_entrega: [
+    'concluido',
+    'cancelado',
+  ],
+
   concluido: [],
+
   cancelado: [],
 });
 
-/** Quem pode colocar o pedido em cada estado (RN-SEG-002). */
+/**
+ * Define quais perfis podem colocar um pedido
+ * em cada status.
+ *
+ * O cliente pode enviar o pedido, mas nao
+ * pode confirmar a aceitacao pelo restaurante.
+ */
 const PERFIS_POR_STATUS = Object.freeze({
-  confirmado: ['gerente', 'garcom', 'cliente'],
-  em_preparo: ['gerente', 'garcom', 'cozinha'],
-  pronto: ['gerente', 'garcom', 'cozinha'],
-  em_entrega: ['gerente', 'garcom', 'entregador'],
-  concluido: ['gerente', 'garcom', 'entregador'],
-  cancelado: ['gerente', 'garcom', 'cliente'],
+  aguardando_confirmacao: [
+    'cliente',
+    'garcom',
+    'gerente',
+  ],
+
+  confirmado: [
+    'gerente',
+  ],
+
+  em_preparo: [
+    'gerente',
+    'garcom',
+    'cozinha',
+  ],
+
+  pronto: [
+    'gerente',
+    'garcom',
+    'cozinha',
+  ],
+
+  em_entrega: [
+    'gerente',
+    'garcom',
+    'entregador',
+  ],
+
+  concluido: [
+    'gerente',
+    'garcom',
+    'entregador',
+  ],
+
+  cancelado: [
+    'gerente',
+    'garcom',
+    'cliente',
+  ],
 });
 
-const ESTADOS_FINAIS = ['concluido', 'cancelado'];
+/**
+ * Estados que nao permitem novas transicoes.
+ */
+const ESTADOS_FINAIS = [
+  'concluido',
+  'cancelado',
+];
 
+/**
+ * Verifica se o pedido esta em um estado final.
+ */
 function ehFinal(status) {
   return ESTADOS_FINAIS.includes(status);
 }
 
 /**
- * Valida a transicao. Lanca AppError com mensagem util quando invalida.
- * @param {object} pedido       pedido atual (linha do banco)
- * @param {string} novoStatus   estado desejado
- * @param {string} perfil       perfil de quem esta pedindo ('cliente' quando nao e equipe)
+ * Valida uma transicao de status.
+ *
+ * @param {object} pedido
+ * Pedido atual armazenado no banco.
+ *
+ * @param {string} novoStatus
+ * Status solicitado.
+ *
+ * @param {string} perfil
+ * Perfil do usuario que solicitou a alteracao.
  */
 function validarTransicao(pedido, novoStatus, perfil) {
   const permitidos = TRANSICOES[pedido.status] || [];
+
+  // ---------------------------------------------------------
+  // Impedir alteracoes em pedidos finalizados
+  // ---------------------------------------------------------
 
   if (ehFinal(pedido.status)) {
     throw AppError.regraDeNegocio(
@@ -58,6 +161,10 @@ function validarTransicao(pedido, novoStatus, perfil) {
       'ESTADO_FINAL'
     );
   }
+
+  // ---------------------------------------------------------
+  // Validar se a transicao e permitida
+  // ---------------------------------------------------------
 
   if (!permitidos.includes(novoStatus)) {
     throw AppError.regraDeNegocio(
@@ -67,34 +174,63 @@ function validarTransicao(pedido, novoStatus, perfil) {
     );
   }
 
-  const perfisPermitidos = PERFIS_POR_STATUS[novoStatus] || [];
+  // ---------------------------------------------------------
+  // Validar permissao do perfil
+  // ---------------------------------------------------------
+
+  const perfisPermitidos =
+    PERFIS_POR_STATUS[novoStatus] || [];
+
   if (!perfisPermitidos.includes(perfil)) {
     throw AppError.proibido(
       `O perfil "${perfil}" nao pode mover o pedido para "${novoStatus}".`
     );
   }
 
-  // RN-PED-008: so pedido de delivery passa por "em_entrega".
-  if (novoStatus === 'em_entrega' && pedido.tipo !== 'delivery') {
+  // ---------------------------------------------------------
+  // Somente delivery pode entrar em rota de entrega
+  // ---------------------------------------------------------
+
+  if (
+    novoStatus === 'em_entrega' &&
+    pedido.tipo !== 'delivery'
+  ) {
     throw AppError.regraDeNegocio(
       'Apenas pedidos de delivery podem entrar em rota de entrega.',
       'TIPO_INCOMPATIVEL'
     );
   }
 
-  // RN-PED-010: nao se conclui pedido sem o pagamento confirmado.
-  if (novoStatus === 'concluido' && pedido.status_pagamento !== 'pago') {
+  // ---------------------------------------------------------
+  // Nao concluir pedido sem pagamento confirmado
+  // ---------------------------------------------------------
+
+  if (
+    novoStatus === 'concluido' &&
+    pedido.status_pagamento !== 'pago'
+  ) {
     throw AppError.regraDeNegocio(
       'O pedido so pode ser concluido apos a confirmacao do pagamento.',
       'PAGAMENTO_PENDENTE'
     );
   }
 
-  // RN-PED-011: cliente so cancela antes da producao comecar.
-  if (novoStatus === 'cancelado' && perfil === 'cliente') {
-    if (!['rascunho', 'confirmado'].includes(pedido.status)) {
+  // ---------------------------------------------------------
+  // Cliente so pode cancelar antes da aprovacao do gerente
+  // ---------------------------------------------------------
+
+  if (
+    novoStatus === 'cancelado' &&
+    perfil === 'cliente'
+  ) {
+    const estadosCancelaveis = [
+      'rascunho',
+      'aguardando_confirmacao',
+    ];
+
+    if (!estadosCancelaveis.includes(pedido.status)) {
       throw AppError.regraDeNegocio(
-        'O pedido ja entrou em producao. Fale com o restaurante para cancelar.',
+        'O pedido ja foi confirmado pelo restaurante. Fale com o restaurante para cancelar.',
         'CANCELAMENTO_TARDIO'
       );
     }
@@ -103,4 +239,10 @@ function validarTransicao(pedido, novoStatus, perfil) {
   return true;
 }
 
-module.exports = { TRANSICOES, PERFIS_POR_STATUS, ESTADOS_FINAIS, ehFinal, validarTransicao };
+module.exports = {
+  TRANSICOES,
+  PERFIS_POR_STATUS,
+  ESTADOS_FINAIS,
+  ehFinal,
+  validarTransicao,
+};

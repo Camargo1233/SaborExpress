@@ -5,6 +5,10 @@ import 'Telas/splash_tela.dart';
 import 'Telas/login_tela.dart';
 import 'Telas/cadastro_tela.dart';
 
+// RECUPERAÇÃO DE SENHA
+import 'Telas/esqueci_senha_tela.dart';
+import 'Telas/redefinir_senha_tela.dart';
+
 // CLIENTE
 import 'Telas/home_tela.dart';
 import 'Telas/carrinho_tela.dart';
@@ -57,6 +61,48 @@ class SaborExpressApp extends StatelessWidget {
         '/cadastro': (context) => const CadastroTela(),
 
         // ============================================================
+        // RECUPERAÇÃO DE SENHA
+        // ============================================================
+        '/esqueci-senha': (context) => const EsqueciSenhaTela(),
+
+        '/redefinir-senha': (context) {
+          // Token enviado pelo link de recuperação.
+          //
+          // Exemplo Flutter Web:
+          // http://localhost:8080/#/redefinir-senha?token=ABC
+
+          final uri = Uri.base;
+
+          String? tokenRecuperacao = uri.queryParameters['token'];
+
+          // O Flutter Web utiliza o fragmento (#)
+          // para representar rotas.
+          if (tokenRecuperacao == null || tokenRecuperacao.isEmpty) {
+            final fragmento = uri.fragment;
+
+            if (fragmento.isNotEmpty) {
+              tokenRecuperacao = Uri.tryParse(
+                fragmento,
+              )?.queryParameters['token'];
+            }
+          }
+
+          // Também aceita token enviado como argumento
+          // durante uma navegação interna.
+          if (tokenRecuperacao == null || tokenRecuperacao.isEmpty) {
+            final args = ModalRoute.of(context)?.settings.arguments;
+
+            if (args is Map) {
+              tokenRecuperacao =
+                  args['tokenRecuperacao']?.toString() ??
+                  args['token']?.toString();
+            }
+          }
+
+          return RedefinirSenhaTela(tokenRecuperacao: tokenRecuperacao ?? '');
+        },
+
+        // ============================================================
         // CLIENTE
         // ============================================================
         '/cliente/home': (context) => const HomeTela(),
@@ -75,28 +121,75 @@ class SaborExpressApp extends StatelessWidget {
 
         '/cliente/pix': (context) => const PixTela(),
 
+        // ============================================================
+        // PAGAMENTO SUCESSO
+        // ============================================================
         '/cliente/pagamento-sucesso': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
 
           String tipoPedido = 'delivery';
+          String? pedidoId;
 
           if (args is Map) {
             tipoPedido = args['tipoPedido']?.toString() ?? 'delivery';
+
+            pedidoId =
+                args['pedidoId']?.toString() ?? args['pedido_id']?.toString();
           }
 
-          return PagamentoSucessoTela(tipoPedido: tipoPedido);
+          if (pedidoId == null || pedidoId.isEmpty) {
+            return const Scaffold(
+              body: Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Não foi possível identificar o pedido. '
+                    'Verifique se ele foi registrado.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            );
+          }
+
+          return PagamentoSucessoTela(
+            tipoPedido: tipoPedido,
+            pedidoId: pedidoId,
+          );
         },
 
+        // ============================================================
+        // STATUS DO PEDIDO
+        // ============================================================
         '/cliente/status-pedido': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
 
           String tipoPedido = 'delivery';
+          String? pedidoId;
 
           if (args is Map) {
             tipoPedido = args['tipoPedido']?.toString() ?? 'delivery';
+
+            pedidoId =
+                args['pedidoId']?.toString() ?? args['pedido_id']?.toString();
           }
 
-          return StatusPedidoTela(tipoPedido: tipoPedido);
+          if (pedidoId == null || pedidoId.isEmpty) {
+            return const Scaffold(
+              body: Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Pedido não encontrado. '
+                    'Não foi possível carregar o status.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            );
+          }
+
+          return StatusPedidoTela(tipoPedido: tipoPedido, pedidoId: pedidoId);
         },
 
         // ============================================================

@@ -36,10 +36,12 @@ if (env.nodeEnv !== 'test') {
 app.use(
   rateLimit({
     windowMs: 60 * 1000,
-    max: 300,
-    standardHeaders: true,
+    limit: env.nodeEnv === 'production' ? 300 : 3000,
+    standardHeaders: 'draft-7',
     legacyHeaders: false,
-    message: { erro: 'Muitas requisicoes. Aguarde um instante.' },
+    message: {
+      erro: 'Muitas requisicoes. Aguarde um instante.',
+    },
   })
 );
 

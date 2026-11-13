@@ -1,4 +1,4 @@
-const db = require('../../db');
+﻿const db = require('../../db');
 const repositorio = require('./pedidos.repository');
 const maquina = require('./pedidos.maquinaDeEstados');
 const AppError = require('../../utils/AppError');
@@ -534,9 +534,9 @@ async function confirmar(restaurante, pedidoId, req) {
     // Retirada feita pelo cliente:
     //
     // rascunho
-    //    ↓
+    //    â†“
     // confirmar
-    //    ↓
+    //    â†“
     // em_preparo
     //
     // O cliente nao chama alterarStatus().
@@ -909,7 +909,14 @@ async function alterarStatusItem(
 // EXPORTS
 // ---------------------------------------------------------------------
 
+
+// Envia o pedido utilizando a confirmacao existente.
+async function enviar(restaurante, pedidoId, req) {
+  return confirmar(restaurante, pedidoId, req);
+}
+
 module.exports = {
+  enviar,
   criar,
   adicionarItem,
   atualizarItem,

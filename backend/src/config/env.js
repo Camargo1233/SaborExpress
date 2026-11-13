@@ -29,11 +29,24 @@ const env = {
     expiresIn: process.env.JWT_EXPIRES_IN || '8h',
   },
 
+
   corsOrigins: (process.env.CORS_ORIGINS || '')
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean),
+
+  // =====================================================
+  // ASAAS - PAGAMENTOS PIX
+  // =====================================================
+  asaas: {
+    baseUrl:
+      process.env.ASAAS_BASE_URL ||
+      'https://api-sandbox.asaas.com/v3',
+
+    apiKey: process.env.ASAAS_API_KEY || '',
+  },
 };
+
 
 env.ehProducao = env.nodeEnv === 'production';
 

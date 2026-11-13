@@ -172,4 +172,20 @@ rotas.patch(
   }
 );
 
+
+// Enviar pedido para aprovacao do restaurante
+rotas.post('/pedidos/:pedidoId/enviar', async (req, res, proximo) => {
+  try {
+    const pedido = await servico.enviar(
+      req.restaurante,
+      req.params.pedidoId,
+      req
+    );
+
+    res.json(pedido);
+  } catch (erro) {
+    proximo(erro);
+  }
+});
+
 module.exports = rotas;

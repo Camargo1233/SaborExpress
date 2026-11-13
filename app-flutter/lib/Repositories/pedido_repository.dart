@@ -382,6 +382,34 @@ class PedidoRepository {
   }
 
   // ============================================================
+  // ENVIAR PEDIDO PARA APROVACAO DO GERENTE
+  // ============================================================
+
+  Future<Map<String, dynamic>> enviarPedido(String pedidoId) async {
+    final token = await _buscarToken();
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/pedidos/$pedidoId/enviar'),
+      headers: _headers(token),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Não foi possível enviar o pedido: '
+        '${_mensagemErro(response)}',
+      );
+    }
+
+    final dynamic dados = jsonDecode(response.body);
+
+    if (dados is! Map) {
+      throw Exception('Resposta inválida ao enviar o pedido.');
+    }
+
+    return Map<String, dynamic>.from(dados);
+  }
+
+  // ============================================================
   // CONFIRMAR PEDIDO
   // ============================================================
 
@@ -460,9 +488,9 @@ class PedidoRepository {
     );
 
     // O backend pode retornar:
-    //
     // 201 = pagamento criado
     // 200 = pagamento reaproveitado por idempotência
+
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception(
         'Não foi possível criar o pagamento: '
@@ -504,7 +532,7 @@ class PedidoRepository {
   //
   // IMPORTANTE:
   //
-  // confirmar o pagamento NÃO altera pedidos.status para
+  // Confirmar o pagamento NÃO altera pedidos.status para
   // "concluido".
   //
   // Ele altera o pagamento para "aprovado" e sincroniza

@@ -1,3 +1,4 @@
+
 const { Router } = require('express');
 const { z } = require('zod');
 
@@ -8,8 +9,11 @@ const { exigirPerfil } = require('../../middlewares/restaurante');
 
 const rotas = Router({ mergeParams: true });
 
-// Todas as rotas de mesa exigem usuario da equipe.
 rotas.use(autenticar);
+
+// ============================================================
+// SCHEMAS
+// ============================================================
 
 const schemaMesa = z.object({
   numero: z.number().int().positive(),
@@ -21,23 +25,98 @@ const schemaAbertura = z.object({
   qtdPessoas: z.number().int().positive().max(50).optional(),
 });
 
-rotas.get('/mesas', exigirPerfil('gerente', 'garcom', 'cozinha'), async (req, res, proximo) => {
-  try {
-    res.json(await servico.listarMesas(req.restaurante));
-  } catch (erro) {
-    proximo(erro);
-  }
+const schemaSelecaoCliente = z.object({
+  qtdPessoas: z.number().int().positive().max(50),
 });
 
-rotas.post('/mesas', exigirPerfil('gerente'), validar(schemaMesa), async (req, res, proximo) => {
-  try {
-    res.status(201).json(await servico.criarMesa(req.restaurante, req.body));
-  } catch (erro) {
-    proximo(erro);
-  }
-});
+// ============================================================
+// CLIENTE - LISTAR MESAS DISPONÍVEIS
+// ============================================================
 
-// Abrir comanda (ocupar a mesa)
+rotas.get(
+  '/mesas/disponiveis',
+  async (req, res, proximo) => {
+    try {
+      const mesas =
+        await servico.listarMesasDisponiveis(
+          req.restaurante
+        );
+
+      res.json(mesas);
+    } catch (erro) {
+      proximo(erro);
+    }
+  }
+);
+
+// ============================================================
+// CLIENTE - SELECIONAR MESA E ABRIR COMANDA
+// ============================================================
+
+rotas.post(
+  '/mesas/:mesaId/reservar',
+  validar(schemaSelecaoCliente),
+  async (req, res, proximo) => {
+    try {
+      const sessao =
+        await servico.selecionarMesaCliente(
+          req.restaurante,
+          req.params.mesaId,
+          req.usuario,
+          req.body
+        );
+
+      res.status(201).json(sessao);
+    } catch (erro) {
+      proximo(erro);
+    }
+  }
+);
+
+// ============================================================
+// EQUIPE - LISTAR TODAS AS MESAS
+// ============================================================
+
+rotas.get(
+  '/mesas',
+  exigirPerfil('gerente', 'garcom', 'cozinha'),
+  async (req, res, proximo) => {
+    try {
+      res.json(
+        await servico.listarMesas(req.restaurante)
+      );
+    } catch (erro) {
+      proximo(erro);
+    }
+  }
+);
+
+// ============================================================
+// GERENTE - CRIAR MESA
+// ============================================================
+
+rotas.post(
+  '/mesas',
+  exigirPerfil('gerente'),
+  validar(schemaMesa),
+  async (req, res, proximo) => {
+    try {
+      const mesa = await servico.criarMesa(
+        req.restaurante,
+        req.body
+      );
+
+      res.status(201).json(mesa);
+    } catch (erro) {
+      proximo(erro);
+    }
+  }
+);
+
+// ============================================================
+// EQUIPE - ABRIR COMANDA
+// ============================================================
+
 rotas.post(
   '/mesas/:mesaId/sessoes',
   exigirPerfil('gerente', 'garcom'),
@@ -50,6 +129,7 @@ rotas.post(
         req.usuario,
         req.body
       );
+
       res.status(201).json(sessao);
     } catch (erro) {
       proximo(erro);
@@ -57,40 +137,70 @@ rotas.post(
   }
 );
 
-// Conta consolidada da comanda
+// ============================================================
+// EQUIPE - DETALHAR COMANDA
+// ============================================================
+
 rotas.get(
   '/sessoes/:sessaoId',
   exigirPerfil('gerente', 'garcom', 'cozinha'),
   async (req, res, proximo) => {
     try {
-      res.json(await servico.detalharSessao(req.restaurante, req.params.sessaoId));
+      res.json(
+        await servico.detalharSessao(
+          req.restaurante,
+          req.params.sessaoId
+        )
+      );
     } catch (erro) {
       proximo(erro);
     }
   }
 );
 
-// Aceitar/recusar a taxa de servico
+// ============================================================
+// EQUIPE - TAXA DE SERVIÇO
+// ============================================================
+
 rotas.patch(
   '/sessoes/:sessaoId/servico',
   exigirPerfil('gerente', 'garcom'),
-  validar(z.object({ aceito: z.boolean() })),
+  validar(
+    z.object({
+      aceito: z.boolean(),
+    })
+  ),
   async (req, res, proximo) => {
     try {
-      res.json(await servico.definirServico(req.restaurante, req.params.sessaoId, req.body.aceito));
+      res.json(
+        await servico.definirServico(
+          req.restaurante,
+          req.params.sessaoId,
+          req.body.aceito
+        )
+      );
     } catch (erro) {
       proximo(erro);
     }
   }
 );
 
-// Fechar comanda e liberar a mesa
+// ============================================================
+// EQUIPE - FECHAR COMANDA
+// ============================================================
+
 rotas.post(
   '/sessoes/:sessaoId/fechar',
   exigirPerfil('gerente', 'garcom'),
   async (req, res, proximo) => {
     try {
-      res.json(await servico.fecharSessao(req.restaurante, req.params.sessaoId, req.usuario));
+      res.json(
+        await servico.fecharSessao(
+          req.restaurante,
+          req.params.sessaoId,
+          req.usuario
+        )
+      );
     } catch (erro) {
       proximo(erro);
     }
