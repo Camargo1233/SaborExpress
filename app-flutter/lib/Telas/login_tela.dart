@@ -1,3 +1,5 @@
+import '../api_config.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -30,8 +32,8 @@ class _LoginTelaState extends State<LoginTela> {
 
     final email = emailController.text.trim().toLowerCase();
 
-    // Não usar trim() na senha:
-    // espaços podem fazer parte da senha.
+    // NÃ£o usar trim() na senha:
+    // espaÃ§os podem fazer parte da senha.
     final senha = senhaController.text;
 
     if (email.isEmpty || senha.isEmpty) {
@@ -46,7 +48,7 @@ class _LoginTelaState extends State<LoginTela> {
     try {
       final response = await http
           .post(
-            Uri.parse('http://localhost:3000/api/auth/login'),
+            Uri.parse('${ApiConfig.baseUrl}/api/auth/login'),
             headers: {
               'Content-Type': 'application/json; charset=UTF-8',
               'Accept': 'application/json',
@@ -55,7 +57,7 @@ class _LoginTelaState extends State<LoginTela> {
           )
           .timeout(const Duration(seconds: 15));
 
-      // Não exibir senha ou token nos logs.
+      // NÃ£o exibir senha ou token nos logs.
       debugPrint('LOGIN - HTTP ${response.statusCode}');
 
       dynamic dados;
@@ -63,7 +65,7 @@ class _LoginTelaState extends State<LoginTela> {
       try {
         dados = jsonDecode(utf8.decode(response.bodyBytes));
       } catch (_) {
-        throw Exception('O servidor retornou uma resposta inválida.');
+        throw Exception('O servidor retornou uma resposta invÃ¡lida.');
       }
 
       // ========================================================
@@ -71,7 +73,7 @@ class _LoginTelaState extends State<LoginTela> {
       // ========================================================
 
       if (response.statusCode != 200) {
-        String mensagem = 'Não foi possível entrar.';
+        String mensagem = 'NÃ£o foi possÃ­vel entrar.';
 
         if (dados is Map<String, dynamic>) {
           final erro = dados['erro'] ?? dados['mensagem'] ?? dados['message'];
@@ -82,7 +84,7 @@ class _LoginTelaState extends State<LoginTela> {
         }
 
         if (response.statusCode == 401) {
-          mensagem = 'E-mail ou senha inválidos.';
+          mensagem = 'E-mail ou senha invÃ¡lidos.';
         } else if (response.statusCode >= 500) {
           mensagem = 'Erro no servidor. Tente novamente.';
         }
@@ -98,13 +100,13 @@ class _LoginTelaState extends State<LoginTela> {
       // ========================================================
 
       if (dados is! Map<String, dynamic>) {
-        throw Exception('Resposta inválida do servidor.');
+        throw Exception('Resposta invÃ¡lida do servidor.');
       }
 
       final token = dados['token']?.toString();
 
       if (token == null || token.isEmpty) {
-        throw Exception('O servidor não enviou o token de acesso.');
+        throw Exception('O servidor nÃ£o enviou o token de acesso.');
       }
 
       final usuario = dados['usuario'];
@@ -114,7 +116,7 @@ class _LoginTelaState extends State<LoginTela> {
           : [];
 
       // ========================================================
-      // SALVAR SESSÃO
+      // SALVAR SESSÃƒO
       // ========================================================
 
       final prefs = await SharedPreferences.getInstance();
@@ -122,7 +124,7 @@ class _LoginTelaState extends State<LoginTela> {
       await prefs.setString('token', token);
       await prefs.setString('email_login', email);
 
-      // Limpa informações de um perfil anterior.
+      // Limpa informaÃ§Ãµes de um perfil anterior.
       await prefs.remove('perfil');
       await prefs.remove('restaurante_slug');
       await prefs.remove('restaurante_id');
@@ -181,13 +183,13 @@ class _LoginTelaState extends State<LoginTela> {
 
       Navigator.pushReplacementNamed(context, rotaDestino);
     } on http.ClientException catch (erro) {
-      debugPrint('LOGIN - Falha de conexão: $erro');
+      debugPrint('LOGIN - Falha de conexÃ£o: $erro');
 
       if (!mounted) return;
 
       _mostrarMensagem(
-        'Não foi possível conectar ao servidor. '
-        'Verifique se o backend está ligado.',
+        'NÃ£o foi possÃ­vel conectar ao servidor. '
+        'Verifique se o backend estÃ¡ ligado.',
       );
     } catch (erro) {
       debugPrint('LOGIN - Erro: $erro');
@@ -249,7 +251,7 @@ class _LoginTelaState extends State<LoginTela> {
           ),
 
           // ======================================================
-          // FORMULÁRIO
+          // FORMULÃRIO
           // ======================================================
           Align(
             alignment: Alignment.bottomCenter,
@@ -331,7 +333,7 @@ class _LoginTelaState extends State<LoginTela> {
                   const Spacer(),
 
                   // ==============================================
-                  // BOTÃO ENTRAR
+                  // BOTÃƒO ENTRAR
                   // ==============================================
                   if (carregando)
                     const Center(
@@ -350,7 +352,7 @@ class _LoginTelaState extends State<LoginTela> {
           ),
 
           // ======================================================
-          // BOTÃO VOLTAR
+          // BOTÃƒO VOLTAR
           // ======================================================
           Positioned(
             top: 45,

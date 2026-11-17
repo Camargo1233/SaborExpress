@@ -1,3 +1,5 @@
+import '../api_config.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -37,24 +39,24 @@ class _CadastroTelaState extends State<CadastroTela> {
     final confirmarSenha = confirmarSenhaController.text;
 
     // ==========================================================
-    // VALIDAÇÕES
+    // VALIDAÃ‡Ã•ES
     // ==========================================================
 
     if (nome.isEmpty ||
         email.isEmpty ||
         senha.isEmpty ||
         confirmarSenha.isEmpty) {
-      _mostrarMensagem('Preencha todos os campos obrigatórios.');
+      _mostrarMensagem('Preencha todos os campos obrigatÃ³rios.');
       return;
     }
 
     if (nome.length < 3) {
-      _mostrarMensagem('Informe um nome válido.');
+      _mostrarMensagem('Informe um nome vÃ¡lido.');
       return;
     }
 
     if (!email.contains('@') || !email.contains('.')) {
-      _mostrarMensagem('Digite um e-mail válido.');
+      _mostrarMensagem('Digite um e-mail vÃ¡lido.');
       return;
     }
 
@@ -69,12 +71,12 @@ class _CadastroTelaState extends State<CadastroTela> {
     }
 
     if (!RegExp(r'[0-9]').hasMatch(senha)) {
-      _mostrarMensagem('A senha deve conter pelo menos um número.');
+      _mostrarMensagem('A senha deve conter pelo menos um nÃºmero.');
       return;
     }
 
     if (senha != confirmarSenha) {
-      _mostrarMensagem('As senhas não são iguais.');
+      _mostrarMensagem('As senhas nÃ£o sÃ£o iguais.');
       return;
     }
 
@@ -93,13 +95,13 @@ class _CadastroTelaState extends State<CadastroTela> {
         'senha': senha,
       };
 
-      // Telefone é opcional no backend.
+      // Telefone Ã© opcional no backend.
       if (telefone.isNotEmpty) {
         body['telefone'] = telefone;
       }
 
       final resposta = await http.post(
-        Uri.parse('http://localhost:3000/api/auth/registrar'),
+        Uri.parse('${ApiConfig.baseUrl}/api/auth/registrar'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -117,7 +119,7 @@ class _CadastroTelaState extends State<CadastroTela> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Cadastro realizado com sucesso! Agora faça o login.',
+              'Cadastro realizado com sucesso! Agora faÃ§a o login.',
             ),
             backgroundColor: AppColors.green,
           ),
@@ -131,7 +133,7 @@ class _CadastroTelaState extends State<CadastroTela> {
       // ERRO RETORNADO PELO BACKEND
       // ========================================================
 
-      String mensagem = 'Não foi possível realizar o cadastro.';
+      String mensagem = 'NÃ£o foi possÃ­vel realizar o cadastro.';
 
       try {
         final dados = jsonDecode(resposta.body);
@@ -146,7 +148,7 @@ class _CadastroTelaState extends State<CadastroTela> {
           }
         }
       } catch (_) {
-        // Mantém a mensagem padrão.
+        // MantÃ©m a mensagem padrÃ£o.
       }
 
       if (!mounted) return;
@@ -156,8 +158,8 @@ class _CadastroTelaState extends State<CadastroTela> {
       if (!mounted) return;
 
       _mostrarMensagem(
-        'Não foi possível conectar ao servidor. '
-        'Verifique se o backend está iniciado.',
+        'NÃ£o foi possÃ­vel conectar ao servidor. '
+        'Verifique se o backend estÃ¡ iniciado.',
       );
     } finally {
       if (mounted) {
@@ -222,7 +224,7 @@ class _CadastroTelaState extends State<CadastroTela> {
           ),
 
           // ====================================================
-          // FORMULÁRIO
+          // FORMULÃRIO
           // ====================================================
           Positioned(
             top: 0,
@@ -246,7 +248,7 @@ class _CadastroTelaState extends State<CadastroTela> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // ========================================
-                      // TÍTULO
+                      // TÃTULO
                       // ========================================
                       Row(
                         children: [
@@ -329,7 +331,7 @@ class _CadastroTelaState extends State<CadastroTela> {
                       const Padding(
                         padding: EdgeInsets.only(left: 4),
                         child: Text(
-                          'Mínimo de 8 caracteres, com letra e número.',
+                          'MÃ­nimo de 8 caracteres, com letra e nÃºmero.',
                           style: TextStyle(
                             color: AppColors.mutedText,
                             fontSize: 12,
@@ -352,7 +354,7 @@ class _CadastroTelaState extends State<CadastroTela> {
                       const SizedBox(height: 24),
 
                       // ========================================
-                      // BOTÃO
+                      // BOTÃƒO
                       // ========================================
                       if (carregando)
                         const Center(

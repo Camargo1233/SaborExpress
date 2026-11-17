@@ -1,14 +1,35 @@
+﻿import '../api_config.dart';
+
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class RelatorioRepository {
-  static const String baseUrl =
-      'http://localhost:3000/api/restaurantes/sabor-express/relatorios';
+  static final String baseUrl =
+      '${ApiConfig.baseUrl}/api/restaurantes/sabor-express/relatorios';
 
-  static const String restauranteBaseUrl =
-      'http://localhost:3000/api/restaurantes/sabor-express';
+  static final String restauranteBaseUrl =
+      '${ApiConfig.baseUrl}/api/restaurantes/sabor-express';
+
+  // ============================================================
+  // DATA DE BRASÍLIA
+  // ============================================================
+
+  // Retorna a data atual de Brasília, sem depender do
+  // fuso horário configurado no emulador Android.
+  DateTime _hojeBrasilia() {
+    final agoraBrasilia = DateTime.now().toUtc().subtract(
+      const Duration(hours: 3),
+    );
+
+    return DateTime.utc(
+      agoraBrasilia.year,
+      agoraBrasilia.month,
+      agoraBrasilia.day,
+    );
+  }
 
   // ============================================================
   // TOKEN
@@ -95,9 +116,18 @@ class RelatorioRepository {
       queryParameters: {'de': _formatarData(de), 'ate': _formatarData(ate)},
     );
 
+    debugPrint('URL DO RELATORIO: $uri');
+
     final response = await http
         .get(uri, headers: _headers(token))
         .timeout(const Duration(seconds: 15));
+
+    debugPrint('STATUS RELATORIO: ${response.statusCode}');
+
+    debugPrint(
+      'RESPOSTA RELATORIO: '
+      '${utf8.decode(response.bodyBytes)}',
+    );
 
     if (response.statusCode != 200) {
       throw Exception(
@@ -120,9 +150,12 @@ class RelatorioRepository {
   // ============================================================
 
   Future<Map<String, dynamic>> buscarResumoHoje() async {
-    final agora = DateTime.now();
+    final hoje = _hojeBrasilia();
 
-    final hoje = DateTime(agora.year, agora.month, agora.day);
+    debugPrint(
+      'DASHBOARD - DATA DE BRASÍLIA: '
+      '${_formatarData(hoje)}',
+    );
 
     return buscarResumo(de: hoje, ate: hoje);
   }
@@ -167,22 +200,43 @@ class RelatorioRepository {
   }
 
   // ============================================================
-  // MAIS VENDIDOS DA SEMANA
+  // MAIS VENDIDOS DE HOJE
+  // ============================================================
+
+  Future<List<Map<String, dynamic>>> buscarMaisVendidosHoje() async {
+    final hoje = _hojeBrasilia();
+
+    return buscarMaisVendidos(de: hoje, ate: hoje);
+  }
+
+  // ============================================================
+  // PRODUTO MAIS VENDIDO DE HOJE
+  // ============================================================
+
+  Future<Map<String, dynamic>?> buscarProdutoMaisVendidoHoje() async {
+    final produtos = await buscarMaisVendidosHoje();
+
+    if (produtos.isEmpty) {
+      return null;
+    }
+
+    return produtos.first;
+  }
+
+  // ============================================================
+  // MAIS VENDIDOS DOS ÚLTIMOS 7 DIAS
   // ============================================================
 
   Future<List<Map<String, dynamic>>> buscarMaisVendidosSemana() async {
-    final agora = DateTime.now();
+    final hoje = _hojeBrasilia();
 
-    final hoje = DateTime(agora.year, agora.month, agora.day);
-
-    // Hoje + 6 dias anteriores = últimos 7 dias.
     final inicio = hoje.subtract(const Duration(days: 6));
 
     return buscarMaisVendidos(de: inicio, ate: hoje);
   }
 
   // ============================================================
-  // PRODUTO MAIS VENDIDO DA SEMANA
+  // PRODUTO MAIS VENDIDO DOS ÚLTIMOS 7 DIAS
   // ============================================================
 
   Future<Map<String, dynamic>?> buscarProdutoMaisVendidoSemana() async {
@@ -256,43 +310,44 @@ class RelatorioRepository {
   }
 
   // ============================================================
-  // DASHBOARD
+  // DASHBOARD DA HOME DO GERENTE
   // ============================================================
 
   Future<Map<String, dynamic>> buscarDashboard() async {
+    // Pedidos, faturamento e produto mais vendido
+    // utilizam a mesma data de Brasília.
+
+    final hoje = _hojeBrasilia();
+
     final resultados = await Future.wait<dynamic>([
-      buscarResumoHoje(),
-      buscarProdutoMaisVendidoSemana(),
+      buscarResumo(de: hoje, ate: hoje),
+      buscarMaisVendidos(de: hoje, ate: hoje),
       buscarMesasOcupadas(),
     ]);
 
     final resumo = Map<String, dynamic>.from(resultados[0] as Map);
 
-    final Map<String, dynamic>? maisVendido = resultados[1] == null
+    final listaProdutos = (resultados[1] as List)
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+
+    final Map<String, dynamic>? maisVendido = listaProdutos.isEmpty
         ? null
-        : Map<String, dynamic>.from(resultados[1] as Map);
+        : listaProdutos.first;
 
     final mesas = Map<String, dynamic>.from(resultados[2] as Map);
 
     return {
       'pedidos_total': resumo['pedidos_total'] ?? 0,
-
       'pedidos_concluidos': resumo['pedidos_concluidos'] ?? 0,
-
       'pedidos_cancelados': resumo['pedidos_cancelados'] ?? 0,
-
       'pedidos_em_andamento': resumo['pedidos_em_andamento'] ?? 0,
-
       'faturamento': resumo['faturamento'] ?? 0,
-
       'ticket_medio': resumo['ticket_medio'] ?? 0,
-
       'mais_vendido': maisVendido,
-
       'mesas_ocupadas': mesas['mesas_ocupadas'] ?? 0,
-
       'total_mesas': mesas['total_mesas'] ?? 0,
-
       'mesas_livres': mesas['mesas_livres'] ?? 0,
     };
   }

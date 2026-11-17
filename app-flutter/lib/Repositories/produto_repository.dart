@@ -1,3 +1,5 @@
+import '../api_config.dart';
+
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -7,8 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/produto.dart';
 
 class ProdutoRepository {
-  static const String baseUrl =
-      'http://localhost:3000/api/restaurantes/sabor-express/produtos';
+  static final String baseUrl =
+      '${ApiConfig.baseUrl}/api/restaurantes/sabor-express/produtos';
 
   // ============================================================
   // TOKEN
@@ -37,7 +39,7 @@ class ProdutoRepository {
         }
       }
     } catch (_) {
-      // Backend não retornou JSON.
+      // Backend nÃ£o retornou JSON.
     }
 
     return 'Erro ${response.statusCode}';
@@ -57,7 +59,7 @@ class ProdutoRepository {
         }
       }
     } catch (_) {
-      // Backend não retornou JSON.
+      // Backend nÃ£o retornou JSON.
     }
 
     return 'Erro $statusCode';
@@ -89,12 +91,12 @@ class ProdutoRepository {
               .toList();
         }
 
-        throw Exception('Formato de resposta inválido.');
+        throw Exception('Formato de resposta invÃ¡lido.');
       }
 
       throw Exception(_mensagemErro(response));
     } catch (erro) {
-      throw Exception('Não foi possível buscar os produtos: $erro');
+      throw Exception('NÃ£o foi possÃ­vel buscar os produtos: $erro');
     }
   }
 
@@ -102,7 +104,7 @@ class ProdutoRepository {
   // UPLOAD DE IMAGEM
   // ============================================================
   //
-  // Funciona com Flutter Web porque não utiliza dart:io nem File.
+  // Funciona com Flutter Web porque nÃ£o utiliza dart:io nem File.
   //
   // Recebe os bytes vindos do ImagePicker e envia:
   //
@@ -116,7 +118,7 @@ class ProdutoRepository {
   // O backend responde:
   //
   // {
-  //   "imagemUrl": "http://localhost:3000/uploads/produtos/..."
+  //   "imagemUrl": "${ApiConfig.baseUrl}/uploads/produtos/..."
   // }
   // ============================================================
 
@@ -127,11 +129,11 @@ class ProdutoRepository {
     final token = await _buscarToken();
 
     if (token == null || token.isEmpty) {
-      throw Exception('Sessão não encontrada. Faça login novamente.');
+      throw Exception('SessÃ£o nÃ£o encontrada. FaÃ§a login novamente.');
     }
 
     if (imagemBytes.isEmpty) {
-      throw Exception('A imagem selecionada está vazia.');
+      throw Exception('A imagem selecionada estÃ¡ vazia.');
     }
 
     try {
@@ -165,7 +167,7 @@ class ProdutoRepository {
           }
         }
 
-        throw Exception('O backend não retornou a URL da imagem.');
+        throw Exception('O backend nÃ£o retornou a URL da imagem.');
       }
 
       throw Exception(
@@ -175,7 +177,7 @@ class ProdutoRepository {
         ),
       );
     } catch (erro) {
-      throw Exception('Não foi possível enviar a imagem: $erro');
+      throw Exception('NÃ£o foi possÃ­vel enviar a imagem: $erro');
     }
   }
 
@@ -196,7 +198,7 @@ class ProdutoRepository {
     final token = await _buscarToken();
 
     if (token == null || token.isEmpty) {
-      throw Exception('Sessão não encontrada. Faça login novamente.');
+      throw Exception('SessÃ£o nÃ£o encontrada. FaÃ§a login novamente.');
     }
 
     final body = <String, dynamic>{
@@ -232,7 +234,7 @@ class ProdutoRepository {
     }
 
     throw Exception(
-      'Não foi possível criar o produto: '
+      'NÃ£o foi possÃ­vel criar o produto: '
       '${_mensagemErro(response)}',
     );
   }
@@ -255,7 +257,7 @@ class ProdutoRepository {
     final token = await _buscarToken();
 
     if (token == null || token.isEmpty) {
-      throw Exception('Sessão não encontrada. Faça login novamente.');
+      throw Exception('SessÃ£o nÃ£o encontrada. FaÃ§a login novamente.');
     }
 
     final body = <String, dynamic>{
@@ -300,7 +302,7 @@ class ProdutoRepository {
     }
 
     throw Exception(
-      'Não foi possível atualizar o produto: '
+      'NÃ£o foi possÃ­vel atualizar o produto: '
       '${_mensagemErro(response)}',
     );
   }
@@ -313,7 +315,7 @@ class ProdutoRepository {
     final token = await _buscarToken();
 
     if (token == null || token.isEmpty) {
-      throw Exception('Sessão não encontrada. Faça login novamente.');
+      throw Exception('SessÃ£o nÃ£o encontrada. FaÃ§a login novamente.');
     }
 
     final response = await http.delete(
@@ -329,7 +331,7 @@ class ProdutoRepository {
     }
 
     throw Exception(
-      'Não foi possível excluir o produto: '
+      'NÃ£o foi possÃ­vel excluir o produto: '
       '${_mensagemErro(response)}',
     );
   }

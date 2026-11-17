@@ -1,11 +1,13 @@
+import '../api_config.dart';
+
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PagamentoRepository {
-  static const String baseUrl =
-      'http://localhost:3000/api/restaurantes/sabor-express';
+  static final String baseUrl =
+      '${ApiConfig.baseUrl}/api/restaurantes/sabor-express';
 
   // ============================================================
   // AUTENTICACAO
@@ -16,7 +18,7 @@ class PagamentoRepository {
     final token = prefs.getString('token');
 
     if (token == null || token.trim().isEmpty) {
-      throw Exception('Usuário não autenticado. Faça login novamente.');
+      throw Exception('UsuÃ¡rio nÃ£o autenticado. FaÃ§a login novamente.');
     }
 
     return token;
@@ -57,7 +59,7 @@ class PagamentoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map) {
-      throw Exception('O servidor retornou uma resposta inválida.');
+      throw Exception('O servidor retornou uma resposta invÃ¡lida.');
     }
 
     return Map<String, dynamic>.from(dados);
@@ -67,7 +69,7 @@ class PagamentoRepository {
     final valor = id.trim();
 
     if (valor.isEmpty) {
-      throw Exception('$descricao inválido.');
+      throw Exception('$descricao invÃ¡lido.');
     }
 
     return Uri.encodeComponent(valor);

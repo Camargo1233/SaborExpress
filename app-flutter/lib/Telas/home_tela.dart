@@ -20,12 +20,10 @@ class HomeTela extends StatefulWidget {
 class _HomeTelaState extends State<HomeTela> with WidgetsBindingObserver {
   final ProdutoRepository repository = ProdutoRepository();
   final PedidoRepository pedidoRepository = PedidoRepository();
-  final TextEditingController pesquisaController = TextEditingController();
 
   late Future<List<Produto>> produtosFuture;
 
   String categoriaSelecionada = 'Mais Pedidos';
-  bool pesquisando = false;
 
   Timer? _timerPedidos;
   List<Map<String, dynamic>> _pedidosAtivos = [];
@@ -77,7 +75,6 @@ class _HomeTelaState extends State<HomeTela> with WidgetsBindingObserver {
   void dispose() {
     _timerPedidos?.cancel();
     WidgetsBinding.instance.removeObserver(this);
-    pesquisaController.dispose();
     super.dispose();
   }
 
@@ -252,6 +249,14 @@ class _HomeTelaState extends State<HomeTela> with WidgetsBindingObserver {
     }
   }
 
+  String? _numeroMesa(Map<String, dynamic> pedido) {
+    final valor = pedido['mesa_numero'];
+    if (valor == null) return null;
+    final numero = valor.toString().trim();
+    if (numero.isEmpty) return null;
+    return numero;
+  }
+
   String _tipoPedido(String tipo) {
     switch (tipo) {
       case 'delivery':
@@ -293,6 +298,7 @@ class _HomeTelaState extends State<HomeTela> with WidgetsBindingObserver {
       final status = detalhes['status']?.toString() ?? '';
       final tipo = detalhes['tipo']?.toString() ?? '';
       final numero = _numeroPedido(detalhes);
+      final mesaNumero = tipo == 'mesa' ? _numeroMesa(detalhes) : null;
 
       final itensBrutos = detalhes['itens'];
 
@@ -364,6 +370,36 @@ class _HomeTelaState extends State<HomeTela> with WidgetsBindingObserver {
                         ),
                       ],
                     ),
+
+                    if (mesaNumero != null) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.table_restaurant_outlined,
+                            color: AppColors.green,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Mesa $mesaNumero',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.darkGreen,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Confirme este número com o garçom.',
+                        style: TextStyle(
+                          color: AppColors.mutedText,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
 
                     const SizedBox(height: 12),
 
@@ -606,6 +642,7 @@ class _HomeTelaState extends State<HomeTela> with WidgetsBindingObserver {
                 final tipo = pedido['tipo']?.toString() ?? '';
 
                 final numero = _numeroPedido(pedido);
+                final mesaNumero = tipo == 'mesa' ? _numeroMesa(pedido) : null;
 
                 return Material(
                   color: Colors.white,
@@ -654,6 +691,27 @@ class _HomeTelaState extends State<HomeTela> with WidgetsBindingObserver {
                               ),
                             ],
                           ),
+
+                          if (mesaNumero != null) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.table_restaurant_outlined,
+                                  color: AppColors.green,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Mesa $mesaNumero',
+                                  style: const TextStyle(
+                                    color: AppColors.darkGreen,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
 
                           const SizedBox(height: 12),
 
@@ -745,8 +803,6 @@ class _HomeTelaState extends State<HomeTela> with WidgetsBindingObserver {
   // ============================================================
 
   List<Produto> _filtrarProdutos(List<Produto> produtos) {
-    final termo = pesquisaController.text.trim().toLowerCase();
-
     return produtos.where((produto) {
       final categoriaProduto = produto.categoria.trim().toLowerCase();
 
@@ -760,27 +816,8 @@ class _HomeTelaState extends State<HomeTela> with WidgetsBindingObserver {
         combinaCategoria = categoriaProduto == categoriaAtual;
       }
 
-      final combinaPesquisa =
-          termo.isEmpty ||
-          produto.nome.toLowerCase().contains(termo) ||
-          produto.descricao.toLowerCase().contains(termo);
-
-      return combinaCategoria && combinaPesquisa;
+      return combinaCategoria;
     }).toList();
-  }
-
-  // ============================================================
-  // PESQUISA
-  // ============================================================
-
-  void _abrirPesquisa() {
-    setState(() {
-      pesquisando = !pesquisando;
-
-      if (!pesquisando) {
-        pesquisaController.clear();
-      }
-    });
   }
 
   // ============================================================
@@ -1013,14 +1050,6 @@ class _HomeTelaState extends State<HomeTela> with WidgetsBindingObserver {
               const SizedBox(width: 6),
 
               _HeaderButton(
-                tooltip: 'Pesquisar',
-                icon: pesquisando ? Icons.close : Icons.search_rounded,
-                onPressed: _abrirPesquisa,
-              ),
-
-              const SizedBox(width: 5),
-
-              _HeaderButton(
                 tooltip: 'Carrinho',
                 icon: Icons.shopping_bag_outlined,
                 onPressed: _abrirCarrinho,
@@ -1035,47 +1064,6 @@ class _HomeTelaState extends State<HomeTela> with WidgetsBindingObserver {
               ),
             ],
           ),
-
-          if (pesquisando) ...[
-            const SizedBox(height: 14),
-
-            TextField(
-              controller: pesquisaController,
-              autofocus: true,
-              onChanged: (_) {
-                setState(() {});
-              },
-              decoration: InputDecoration(
-                hintText: 'O que você está procurando?',
-                hintStyle: const TextStyle(color: AppColors.mutedText),
-                prefixIcon: const Icon(Icons.search, color: AppColors.green),
-                suffixIcon: pesquisaController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () {
-                          pesquisaController.clear();
-                          setState(() {});
-                        },
-                        icon: const Icon(Icons.close),
-                      ),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1210,7 +1198,7 @@ class _HomeTelaState extends State<HomeTela> with WidgetsBindingObserver {
           SizedBox(height: 6),
 
           Text(
-            'Tente outra categoria ou pesquisa.',
+            'Tente selecionar outra categoria.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.mutedText),
           ),

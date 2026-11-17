@@ -1,11 +1,13 @@
+import '../api_config.dart';
+
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PedidoRepository {
-  static const String baseUrl =
-      'http://localhost:3000/api/restaurantes/sabor-express';
+  static final String baseUrl =
+      '${ApiConfig.baseUrl}/api/restaurantes/sabor-express';
 
   // ============================================================
   // TOKEN
@@ -16,7 +18,7 @@ class PedidoRepository {
     final token = prefs.getString('token');
 
     if (token == null || token.isEmpty) {
-      throw Exception('Sessão não encontrada. Faça login novamente.');
+      throw Exception('SessÃ£o nÃ£o encontrada. FaÃ§a login novamente.');
     }
 
     return token;
@@ -80,7 +82,7 @@ class PedidoRepository {
 
     if (response.statusCode != 201) {
       throw Exception(
-        'Não foi possível criar o pedido de retirada: '
+        'NÃ£o foi possÃ­vel criar o pedido de retirada: '
         '${_mensagemErro(response)}',
       );
     }
@@ -88,7 +90,7 @@ class PedidoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map) {
-      throw Exception('Resposta inválida ao criar o pedido de retirada.');
+      throw Exception('Resposta invÃ¡lida ao criar o pedido de retirada.');
     }
 
     return Map<String, dynamic>.from(dados);
@@ -103,7 +105,7 @@ class PedidoRepository {
     String? observacao,
   }) async {
     if (enderecoId.trim().isEmpty) {
-      throw Exception('Endereço de entrega não informado.');
+      throw Exception('EndereÃ§o de entrega nÃ£o informado.');
     }
 
     final token = await _buscarToken();
@@ -125,7 +127,7 @@ class PedidoRepository {
 
     if (response.statusCode != 201) {
       throw Exception(
-        'Não foi possível criar o pedido de delivery: '
+        'NÃ£o foi possÃ­vel criar o pedido de delivery: '
         '${_mensagemErro(response)}',
       );
     }
@@ -133,7 +135,7 @@ class PedidoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map) {
-      throw Exception('Resposta inválida ao criar o pedido de delivery.');
+      throw Exception('Resposta invÃ¡lida ao criar o pedido de delivery.');
     }
 
     return Map<String, dynamic>.from(dados);
@@ -166,7 +168,7 @@ class PedidoRepository {
 
     if (response.statusCode != 201) {
       throw Exception(
-        'Não foi possível criar o pedido: '
+        'NÃ£o foi possÃ­vel criar o pedido: '
         '${_mensagemErro(response)}',
       );
     }
@@ -174,7 +176,7 @@ class PedidoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map) {
-      throw Exception('Resposta inválida ao criar o pedido.');
+      throw Exception('Resposta invÃ¡lida ao criar o pedido.');
     }
 
     return Map<String, dynamic>.from(dados);
@@ -213,7 +215,7 @@ class PedidoRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível carregar os pedidos: '
+        'NÃ£o foi possÃ­vel carregar os pedidos: '
         '${_mensagemErro(response)}',
       );
     }
@@ -230,7 +232,7 @@ class PedidoRepository {
       return dados.map((pedido) => Map<String, dynamic>.from(pedido)).toList();
     }
 
-    throw Exception('Formato da lista de pedidos inválido.');
+    throw Exception('Formato da lista de pedidos invÃ¡lido.');
   }
 
   // ============================================================
@@ -247,7 +249,7 @@ class PedidoRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível carregar o pedido: '
+        'NÃ£o foi possÃ­vel carregar o pedido: '
         '${_mensagemErro(response)}',
       );
     }
@@ -255,7 +257,7 @@ class PedidoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map) {
-      throw Exception('Formato do pedido inválido.');
+      throw Exception('Formato do pedido invÃ¡lido.');
     }
 
     return Map<String, dynamic>.from(dados);
@@ -290,7 +292,7 @@ class PedidoRepository {
 
     if (response.statusCode != 201) {
       throw Exception(
-        'Não foi possível adicionar o produto: '
+        'NÃ£o foi possÃ­vel adicionar o produto: '
         '${_mensagemErro(response)}',
       );
     }
@@ -298,7 +300,7 @@ class PedidoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map) {
-      throw Exception('Resposta inválida ao adicionar o produto.');
+      throw Exception('Resposta invÃ¡lida ao adicionar o produto.');
     }
 
     return Map<String, dynamic>.from(dados);
@@ -334,7 +336,7 @@ class PedidoRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível atualizar o item: '
+        'NÃ£o foi possÃ­vel atualizar o item: '
         '${_mensagemErro(response)}',
       );
     }
@@ -342,7 +344,7 @@ class PedidoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map) {
-      throw Exception('Resposta inválida ao atualizar o item.');
+      throw Exception('Resposta invÃ¡lida ao atualizar o item.');
     }
 
     return Map<String, dynamic>.from(dados);
@@ -355,7 +357,7 @@ class PedidoRepository {
   Future<Map<String, dynamic>> removerItem({
     required String pedidoId,
     required String itemId,
-    String motivo = 'Removido pelo garçom',
+    String motivo = 'Removido pelo garÃ§om',
   }) async {
     final token = await _buscarToken();
 
@@ -367,7 +369,7 @@ class PedidoRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível remover o item: '
+        'NÃ£o foi possÃ­vel remover o item: '
         '${_mensagemErro(response)}',
       );
     }
@@ -375,7 +377,7 @@ class PedidoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map) {
-      throw Exception('Resposta inválida ao remover o item.');
+      throw Exception('Resposta invÃ¡lida ao remover o item.');
     }
 
     return Map<String, dynamic>.from(dados);
@@ -395,7 +397,7 @@ class PedidoRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível enviar o pedido: '
+        'NÃ£o foi possÃ­vel enviar o pedido: '
         '${_mensagemErro(response)}',
       );
     }
@@ -403,7 +405,7 @@ class PedidoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map) {
-      throw Exception('Resposta inválida ao enviar o pedido.');
+      throw Exception('Resposta invÃ¡lida ao enviar o pedido.');
     }
 
     return Map<String, dynamic>.from(dados);
@@ -423,7 +425,7 @@ class PedidoRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível confirmar o pedido: '
+        'NÃ£o foi possÃ­vel confirmar o pedido: '
         '${_mensagemErro(response)}',
       );
     }
@@ -431,7 +433,7 @@ class PedidoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map) {
-      throw Exception('Resposta inválida ao confirmar o pedido.');
+      throw Exception('Resposta invÃ¡lida ao confirmar o pedido.');
     }
 
     return Map<String, dynamic>.from(dados);
@@ -441,7 +443,7 @@ class PedidoRepository {
   // CRIAR PAGAMENTO
   // ============================================================
   //
-  // Métodos aceitos pelo backend:
+  // MÃ©todos aceitos pelo backend:
   //
   // pix
   // cartao_credito
@@ -489,11 +491,11 @@ class PedidoRepository {
 
     // O backend pode retornar:
     // 201 = pagamento criado
-    // 200 = pagamento reaproveitado por idempotência
+    // 200 = pagamento reaproveitado por idempotÃªncia
 
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception(
-        'Não foi possível criar o pagamento: '
+        'NÃ£o foi possÃ­vel criar o pagamento: '
         '${_mensagemErro(response)}',
       );
     }
@@ -501,7 +503,7 @@ class PedidoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map) {
-      throw Exception('Resposta inválida ao criar o pagamento.');
+      throw Exception('Resposta invÃ¡lida ao criar o pagamento.');
     }
 
     return Map<String, dynamic>.from(dados);
@@ -532,7 +534,7 @@ class PedidoRepository {
   //
   // IMPORTANTE:
   //
-  // Confirmar o pagamento NÃO altera pedidos.status para
+  // Confirmar o pagamento NÃƒO altera pedidos.status para
   // "concluido".
   //
   // Ele altera o pagamento para "aprovado" e sincroniza
@@ -549,7 +551,7 @@ class PedidoRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível confirmar o pagamento: '
+        'NÃ£o foi possÃ­vel confirmar o pagamento: '
         '${_mensagemErro(response)}',
       );
     }
@@ -557,7 +559,7 @@ class PedidoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map) {
-      throw Exception('Resposta inválida ao confirmar o pagamento.');
+      throw Exception('Resposta invÃ¡lida ao confirmar o pagamento.');
     }
 
     return Map<String, dynamic>.from(dados);
@@ -577,7 +579,7 @@ class PedidoRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível carregar os pagamentos: '
+        'NÃ£o foi possÃ­vel carregar os pagamentos: '
         '${_mensagemErro(response)}',
       );
     }
@@ -585,7 +587,7 @@ class PedidoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! List) {
-      throw Exception('Formato da lista de pagamentos inválido.');
+      throw Exception('Formato da lista de pagamentos invÃ¡lido.');
     }
 
     return dados
@@ -618,7 +620,7 @@ class PedidoRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível alterar o status do pedido: '
+        'NÃ£o foi possÃ­vel alterar o status do pedido: '
         '${_mensagemErro(response)}',
       );
     }
@@ -626,7 +628,7 @@ class PedidoRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map) {
-      throw Exception('Resposta inválida ao alterar o status do pedido.');
+      throw Exception('Resposta invÃ¡lida ao alterar o status do pedido.');
     }
 
     return Map<String, dynamic>.from(dados);

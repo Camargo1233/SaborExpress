@@ -1,3 +1,5 @@
+﻿import '../api_config.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -23,17 +25,15 @@ class _EnderecoTelaState extends State<EnderecoTela> {
   final TextEditingController bairroController = TextEditingController();
   final TextEditingController cidadeController = TextEditingController();
   final TextEditingController estadoController = TextEditingController();
-  final TextEditingController nomeEnderecoController = TextEditingController();
 
   bool buscandoCep = false;
   bool salvandoEndereco = false;
   bool cepConfirmado = false;
-  bool favorito = false;
   bool argumentosCarregados = false;
 
   String? erroCep;
 
-  static const String _baseUrl = 'http://localhost:3000/api';
+  static final String _baseUrl = '${ApiConfig.baseUrl}/api';
 
   @override
   void didChangeDependencies() {
@@ -63,13 +63,6 @@ class _EnderecoTelaState extends State<EnderecoTela> {
       cidadeController.text = endereco['cidade']?.toString() ?? '';
       estadoController.text = endereco['estado']?.toString() ?? '';
 
-      nomeEnderecoController.text =
-          endereco['nomeEndereco']?.toString() ??
-          endereco['apelido']?.toString() ??
-          '';
-
-      favorito = endereco['favorito'] == true || endereco['principal'] == true;
-
       if (cepController.text.trim().isNotEmpty) {
         cepConfirmado = true;
       }
@@ -85,7 +78,6 @@ class _EnderecoTelaState extends State<EnderecoTela> {
     bairroController.dispose();
     cidadeController.dispose();
     estadoController.dispose();
-    nomeEnderecoController.dispose();
 
     super.dispose();
   }
@@ -187,7 +179,8 @@ class _EnderecoTelaState extends State<EnderecoTela> {
         throw Exception('Erro ao consultar CEP');
       }
 
-      final dados = jsonDecode(response.body) as Map<String, dynamic>;
+      final dados =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
 
       if (dados['erro'] == true) {
         if (!mounted) return;
@@ -268,19 +261,13 @@ class _EnderecoTelaState extends State<EnderecoTela> {
         'bairro': bairroController.text.trim(),
         'cidade': cidadeController.text.trim(),
         'estado': estadoController.text.trim().toUpperCase(),
-        'principal': favorito,
+        'principal': false,
       };
 
       final complemento = complementoController.text.trim();
 
       if (complemento.isNotEmpty) {
         body['complemento'] = complemento;
-      }
-
-      final nomeEndereco = nomeEnderecoController.text.trim();
-
-      if (favorito && nomeEndereco.isNotEmpty) {
-        body['apelido'] = nomeEndereco;
       }
 
       final response = await http.post(
@@ -351,13 +338,9 @@ class _EnderecoTelaState extends State<EnderecoTela> {
 
         'principal': enderecoSalvo['principal'] == true,
 
-        'nomeEndereco':
-            enderecoSalvo['apelido']?.toString() ??
-            nomeEnderecoController.text.trim(),
+        'nomeEndereco': enderecoSalvo['apelido']?.toString() ?? '',
 
-        'apelido':
-            enderecoSalvo['apelido']?.toString() ??
-            nomeEnderecoController.text.trim(),
+        'apelido': enderecoSalvo['apelido']?.toString() ?? '',
       };
 
       if (!mounted) return;
@@ -441,6 +424,7 @@ class _EnderecoTelaState extends State<EnderecoTela> {
       padding: const EdgeInsets.only(bottom: 14),
       child: TextFormField(
         controller: controller,
+        readOnly: controller.text.trim().isNotEmpty,
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: Icon(icon, color: AppColors.green),
@@ -574,79 +558,6 @@ class _EnderecoTelaState extends State<EnderecoTela> {
             ),
           ),
       ],
-    );
-  }
-
-  Widget _favorito() {
-    return Container(
-      decoration: BoxDecoration(
-        color: favorito ? AppColors.softGreen : Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: favorito ? AppColors.green : Colors.grey.shade300,
-        ),
-      ),
-      child: Column(
-        children: [
-          SwitchListTile(
-            value: favorito,
-            activeThumbColor: AppColors.green,
-            secondary: Icon(
-              favorito ? Icons.star : Icons.star_border,
-              color: favorito ? AppColors.green : AppColors.mutedText,
-            ),
-            title: const Text(
-              'Salvar como favorito',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            subtitle: const Text(
-              'Use este endereço mais rapidamente nos próximos pedidos.',
-            ),
-            onChanged: salvandoEndereco
-                ? null
-                : (valor) {
-                    setState(() {
-                      favorito = valor;
-
-                      if (!favorito) {
-                        nomeEnderecoController.clear();
-                      }
-                    });
-                  },
-          ),
-
-          if (favorito)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-              child: TextFormField(
-                controller: nomeEnderecoController,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: InputDecoration(
-                  labelText: 'Nome do endereço',
-                  hintText: 'Ex.: Casa, Trabalho',
-                  prefixIcon: const Icon(
-                    Icons.bookmark_outline,
-                    color: AppColors.green,
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                validator: (valor) {
-                  if (!favorito) return null;
-
-                  if (valor == null || valor.trim().isEmpty) {
-                    return 'Informe um nome para o endereço';
-                  }
-
-                  return null;
-                },
-              ),
-            ),
-        ],
-      ),
     );
   }
 
@@ -815,8 +726,6 @@ class _EnderecoTelaState extends State<EnderecoTela> {
                 ),
 
                 const SizedBox(height: 4),
-
-                _favorito(),
 
                 const SizedBox(height: 24),
 

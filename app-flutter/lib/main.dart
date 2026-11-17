@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 
 import 'utils/app_theme.dart';
+
+// ============================================================
+// TELAS INICIAIS
+// ============================================================
 import 'Telas/splash_tela.dart';
 import 'Telas/login_tela.dart';
 import 'Telas/cadastro_tela.dart';
 
+// ============================================================
 // RECUPERAÇÃO DE SENHA
+// ============================================================
 import 'Telas/esqueci_senha_tela.dart';
 import 'Telas/redefinir_senha_tela.dart';
 
+// ============================================================
 // CLIENTE
+// ============================================================
 import 'Telas/home_tela.dart';
 import 'Telas/carrinho_tela.dart';
 import 'Telas/sacola_tela.dart';
@@ -21,21 +29,30 @@ import 'Telas/pix_tela.dart';
 import 'Telas/pagamento_sucesso_tela.dart';
 import 'Telas/status_pedido_tela.dart';
 
+// ============================================================
 // GARÇOM
+// ============================================================
 import 'TelasGarcom/mesas_garcom_tela.dart';
 import 'TelasGarcom/pedido_mesa_garcom_tela.dart';
 import 'TelasGarcom/cardapio_garcom_tela.dart';
 import 'TelasGarcom/finalizacao_garcom_tela.dart';
 
+// ============================================================
 // ADMINISTRADOR
-import 'TelasAdm/cardapio_gerente_tela.dart';
+// ============================================================
 import 'TelasAdm/home_gerente_tela.dart';
+import 'TelasAdm/cardapio_gerente_tela.dart';
 import 'TelasAdm/pedidos_gerente_tela.dart';
 import 'TelasAdm/relatorio_gerente_tela.dart';
 import 'TelasAdm/produto_gerente_tela.dart';
 import 'TelasAdm/adicionar_gerente_tela.dart';
 
+// ============================================================
+// INICIAR APLICATIVO
+// ============================================================
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
   runApp(const SaborExpressApp());
 }
 
@@ -51,32 +68,26 @@ class SaborExpressApp extends StatelessWidget {
       initialRoute: '/',
 
       routes: {
-        // ============================================================
+        // ====================================================
         // TELAS INICIAIS
-        // ============================================================
+        // ====================================================
         '/': (context) => const SplashTela(),
 
         '/login': (context) => const LoginTela(),
 
         '/cadastro': (context) => const CadastroTela(),
 
-        // ============================================================
+        // ====================================================
         // RECUPERAÇÃO DE SENHA
-        // ============================================================
+        // ====================================================
         '/esqueci-senha': (context) => const EsqueciSenhaTela(),
 
         '/redefinir-senha': (context) {
-          // Token enviado pelo link de recuperação.
-          //
-          // Exemplo Flutter Web:
-          // http://localhost:8080/#/redefinir-senha?token=ABC
-
           final uri = Uri.base;
 
           String? tokenRecuperacao = uri.queryParameters['token'];
 
-          // O Flutter Web utiliza o fragmento (#)
-          // para representar rotas.
+          // Recuperação por link no Flutter Web.
           if (tokenRecuperacao == null || tokenRecuperacao.isEmpty) {
             final fragmento = uri.fragment;
 
@@ -87,8 +98,7 @@ class SaborExpressApp extends StatelessWidget {
             }
           }
 
-          // Também aceita token enviado como argumento
-          // durante uma navegação interna.
+          // Recuperação por argumentos de navegação.
           if (tokenRecuperacao == null || tokenRecuperacao.isEmpty) {
             final args = ModalRoute.of(context)?.settings.arguments;
 
@@ -102,9 +112,9 @@ class SaborExpressApp extends StatelessWidget {
           return RedefinirSenhaTela(tokenRecuperacao: tokenRecuperacao ?? '');
         },
 
-        // ============================================================
+        // ====================================================
         // CLIENTE
-        // ============================================================
+        // ====================================================
         '/cliente/home': (context) => const HomeTela(),
 
         '/cliente/carrinho': (context) => const CarrinhoTela(),
@@ -121,9 +131,9 @@ class SaborExpressApp extends StatelessWidget {
 
         '/cliente/pix': (context) => const PixTela(),
 
-        // ============================================================
+        // ====================================================
         // PAGAMENTO SUCESSO
-        // ============================================================
+        // ====================================================
         '/cliente/pagamento-sucesso': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
 
@@ -158,9 +168,9 @@ class SaborExpressApp extends StatelessWidget {
           );
         },
 
-        // ============================================================
+        // ====================================================
         // STATUS DO PEDIDO
-        // ============================================================
+        // ====================================================
         '/cliente/status-pedido': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
 
@@ -192,9 +202,9 @@ class SaborExpressApp extends StatelessWidget {
           return StatusPedidoTela(tipoPedido: tipoPedido, pedidoId: pedidoId);
         },
 
-        // ============================================================
+        // ====================================================
         // GARÇOM
-        // ============================================================
+        // ====================================================
         '/garcom/mesa': (context) => const MesasGarcomTela(),
 
         '/garcom/pedido': (context) => const PedidoMesaGarcomTela(),
@@ -217,9 +227,9 @@ class SaborExpressApp extends StatelessWidget {
           return FinalizacaoGarcomTela(mesa: mesa);
         },
 
-        // ============================================================
+        // ====================================================
         // ADMINISTRADOR
-        // ============================================================
+        // ====================================================
         '/adm/home': (context) => const HomeGerenteTela(),
 
         '/adm/cardapio': (context) => const CardapioGerenteTela(),

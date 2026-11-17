@@ -1,3 +1,5 @@
+import '../api_config.dart';
+
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -13,8 +15,8 @@ class AdicionarGerenteTela extends StatefulWidget {
 }
 
 class _AdicionarGerenteTelaState extends State<AdicionarGerenteTela> {
-  static const String categoriasUrl =
-      'http://localhost:3000/api/restaurantes/sabor-express/categorias';
+  static final String categoriasUrl =
+      '${ApiConfig.baseUrl}/api/restaurantes/sabor-express/categorias';
 
   final nomeController = TextEditingController();
   final descricaoController = TextEditingController();
@@ -53,7 +55,7 @@ class _AdicionarGerenteTelaState extends State<AdicionarGerenteTela> {
       final dynamic dados = jsonDecode(response.body);
 
       if (dados is! List) {
-        throw Exception('Formato de categorias inválido.');
+        throw Exception('Formato de categorias invÃ¡lido.');
       }
 
       final lista = dados
@@ -81,7 +83,7 @@ class _AdicionarGerenteTelaState extends State<AdicionarGerenteTela> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Não foi possível carregar as categorias: $e'),
+          content: Text('NÃ£o foi possÃ­vel carregar as categorias: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -113,7 +115,7 @@ class _AdicionarGerenteTelaState extends State<AdicionarGerenteTela> {
     } catch (e) {
       if (!mounted) return;
 
-      _mostrarMensagem('Não foi possível carregar a imagem: $e');
+      _mostrarMensagem('NÃ£o foi possÃ­vel carregar a imagem: $e');
     }
   }
 
@@ -135,7 +137,7 @@ class _AdicionarGerenteTelaState extends State<AdicionarGerenteTela> {
     }
 
     if (preco == null || preco <= 0) {
-      _mostrarMensagem('Informe um preço válido.');
+      _mostrarMensagem('Informe um preÃ§o vÃ¡lido.');
       return;
     }
 
@@ -311,13 +313,13 @@ class _AdicionarGerenteTelaState extends State<AdicionarGerenteTela> {
                           ),
                     const SizedBox(height: 20),
                     campo(
-                      'Descrição',
+                      'DescriÃ§Ã£o',
                       Icons.description,
                       descricaoController,
                       linhas: 3,
                     ),
                     const SizedBox(height: 20),
-                    campo('Preço', Icons.attach_money, precoController),
+                    campo('PreÃ§o', Icons.attach_money, precoController),
                     const SizedBox(height: 40),
                     SizedBox(
                       width: double.infinity,
@@ -359,7 +361,7 @@ class _AdicionarGerenteTelaState extends State<AdicionarGerenteTela> {
     return TextField(
       controller: controller,
       maxLines: linhas,
-      keyboardType: texto == 'Preço'
+      keyboardType: texto == 'PreÃ§o'
           ? const TextInputType.numberWithOptions(decimal: true)
           : TextInputType.text,
       decoration: InputDecoration(

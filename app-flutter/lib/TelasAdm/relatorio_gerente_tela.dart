@@ -16,19 +16,27 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
   final RelatorioRepository _repository = RelatorioRepository();
   final PedidoRepository _pedidoRepository = PedidoRepository();
 
-  final List<String> filtros = ['Hoje', 'Semana', 'Mês', 'Ano'];
+  final List<String> filtros = ['Hoje', 'Ontem', 'Semana', 'Mês', 'Ano'];
 
   int filtroSelecionado = 0;
+
   bool carregando = true;
   bool atualizando = false;
+
   String? erro;
 
   double faturamento = 0;
   int quantidadePedidos = 0;
+
   String produtoMaisPedido = 'Nenhum produto';
+
   List<Map<String, dynamic>> produtos = [];
 
   Timer? _timer;
+
+  // ============================================================
+  // INICIALIZAÇÃO
+  // ============================================================
 
   @override
   void initState() {
@@ -41,6 +49,7 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
 
     if (!mounted) return;
 
+    // Atualiza automaticamente, inclusive após a meia-noite.
     _timer = Timer.periodic(const Duration(seconds: 10), (_) {
       _carregarRelatorio(silencioso: true);
     });
@@ -52,33 +61,74 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
     super.dispose();
   }
 
+  // ============================================================
+  // DATA E HORA DE BRASÍLIA
+  // ============================================================
+
+  // Representa a hora de Brasília independentemente do
+  // fuso configurado no emulador.
+  //
+  // A data é utilizada somente para montar o período
+  // YYYY-MM-DD enviado ao backend.
+  DateTime _agoraBrasilia() {
+    final utc = DateTime.now().toUtc();
+
+    return utc.subtract(const Duration(hours: 3));
+  }
+
   DateTime _inicioPeriodo() {
-    final agora = DateTime.now();
+    final agora = _agoraBrasilia();
+
+    final hoje = DateTime.utc(agora.year, agora.month, agora.day);
 
     switch (filtroSelecionado) {
+      // HOJE
       case 0:
-        return DateTime(agora.year, agora.month, agora.day);
+        return hoje;
+
+      // ONTEM
       case 1:
-        final hoje = DateTime(agora.year, agora.month, agora.day);
-        return hoje.subtract(Duration(days: agora.weekday - 1));
+        return hoje.subtract(const Duration(days: 1));
+
+      // SEMANA
       case 2:
-        return DateTime(agora.year, agora.month, 1);
+        return hoje.subtract(Duration(days: hoje.weekday - 1));
+
+      // MÊS
       case 3:
-        return DateTime(agora.year, 1, 1);
+        return DateTime.utc(agora.year, agora.month, 1);
+
+      // ANO
+      case 4:
+        return DateTime.utc(agora.year, 1, 1);
+
       default:
-        return DateTime(agora.year, agora.month, agora.day);
+        return hoje;
     }
   }
 
   DateTime _fimPeriodo() {
-    final agora = DateTime.now();
-    return DateTime(agora.year, agora.month, agora.day, 23, 59, 59, 999);
+    final agora = _agoraBrasilia();
+
+    final hoje = DateTime.utc(agora.year, agora.month, agora.day);
+
+    if (filtroSelecionado == 1) {
+      return hoje.subtract(const Duration(days: 1));
+    }
+
+    return hoje;
   }
+
+  // ============================================================
+  // CARREGAMENTO DOS RELATÓRIOS
+  // ============================================================
 
   Future<void> _carregarRelatorio({bool silencioso = false}) async {
     if (atualizando) return;
 
     atualizando = true;
+
+    final filtroDaConsulta = filtroSelecionado;
 
     if (!silencioso && mounted) {
       setState(() {
@@ -90,6 +140,10 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
     try {
       final inicio = _inicioPeriodo();
       final fim = _fimPeriodo();
+
+      debugPrint('RELATÓRIO: ${filtros[filtroSelecionado]}');
+
+      debugPrint('PERÍODO: $inicio até $fim');
 
       final resultados = await Future.wait<dynamic>([
         _repository.buscarResumo(de: inicio, ate: fim),
@@ -105,6 +159,9 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
 
       if (!mounted) return;
 
+      // Evita exibir resultados de um filtro antigo.
+      if (filtroDaConsulta != filtroSelecionado) return;
+
       setState(() {
         faturamento = _paraDouble(resumo['faturamento']);
 
@@ -117,9 +174,7 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
         produtos = listaProdutos;
 
         produtoMaisPedido = produtos.isNotEmpty
-            ? produtos.first['nome']?.toString() ??
-                  produtos.first['produto_nome']?.toString() ??
-                  'Produto'
+            ? _nomeProduto(produtos.first)
             : 'Nenhum produto';
 
         carregando = false;
@@ -133,6 +188,7 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
       if (!silencioso) {
         setState(() {
           carregando = false;
+
           erro = e.toString().replaceFirst('Exception: ', '');
         });
       }
@@ -151,16 +207,25 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
     await _carregarRelatorio();
   }
 
+  // ============================================================
+  // CONVERSÕES E FORMATAÇÕES
+  // ============================================================
+
   double _paraDouble(dynamic valor) {
     if (valor == null) return 0;
-    if (valor is num) return valor.toDouble();
+
+    if (valor is num) {
+      return valor.toDouble();
+    }
 
     return double.tryParse(valor.toString().replaceAll(',', '.')) ?? 0;
   }
 
   int _paraInt(dynamic valor) {
     if (valor == null) return 0;
+
     if (valor is int) return valor;
+
     if (valor is num) return valor.toInt();
 
     return int.tryParse(valor.toString()) ?? 0;
@@ -168,13 +233,17 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
 
   String _formatarDinheiro(dynamic valor) {
     final numero = _paraDouble(valor);
+
     final partes = numero.toStringAsFixed(2).split('.');
+
     final inteiro = partes[0];
     final decimal = partes[1];
+
     final buffer = StringBuffer();
 
     for (int i = 0; i < inteiro.length; i++) {
       final restante = inteiro.length - i;
+
       buffer.write(inteiro[i]);
 
       if (restante > 1 && restante % 3 == 1) {
@@ -200,40 +269,68 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
     );
   }
 
+  String _formatarData(DateTime data) {
+    return '${data.day.toString().padLeft(2, '0')}/'
+        '${data.month.toString().padLeft(2, '0')}/'
+        '${data.year}';
+  }
+
+  String _formatarHora(DateTime data) {
+    return '${data.hour.toString().padLeft(2, '0')}:'
+        '${data.minute.toString().padLeft(2, '0')}';
+  }
+
+  // ============================================================
+  // DATA DOS PEDIDOS
+  // ============================================================
+
   DateTime? _dataPedido(Map<String, dynamic> pedido) {
-    final valor =
-        pedido['criado_em'] ??
-        pedido['created_at'] ??
-        pedido['data_criacao'] ??
-        pedido['confirmado_em'] ??
-        pedido['atualizado_em'];
+    final status = pedido['status']?.toString().toLowerCase() ?? '';
+
+    dynamic valor;
+
+    if (status == 'concluido') {
+      valor = pedido['concluido_em'];
+    } else {
+      valor =
+          pedido['criado_em'] ?? pedido['created_at'] ?? pedido['data_criacao'];
+    }
 
     if (valor == null) return null;
 
-    return DateTime.tryParse(valor.toString())?.toLocal();
+    final data = DateTime.tryParse(valor.toString());
+
+    if (data == null) return null;
+
+    // Converte o instante para Brasília.
+    final brasilia = data.toUtc().subtract(const Duration(hours: 3));
+
+    // Usa uma representação uniforme para comparar
+    // as datas sem depender do fuso do emulador.
+    return DateTime.utc(
+      brasilia.year,
+      brasilia.month,
+      brasilia.day,
+      brasilia.hour,
+      brasilia.minute,
+      brasilia.second,
+      brasilia.millisecond,
+    );
   }
 
   bool _estaNoPeriodo(DateTime data) {
     final inicio = _inicioPeriodo();
     final fim = _fimPeriodo();
 
-    return !data.isBefore(inicio) && !data.isAfter(fim);
+    // Inclui o dia final inteiro.
+    final fimExclusivo = fim.add(const Duration(days: 1));
+
+    return !data.isBefore(inicio) && data.isBefore(fimExclusivo);
   }
 
-  bool _pedidoPago(Map<String, dynamic> pedido) {
-    final statusPagamento =
-        (pedido['status_pagamento'] ??
-                pedido['pagamento_status'] ??
-                pedido['statusPagamento'] ??
-                '')
-            .toString()
-            .toLowerCase();
-
-    return statusPagamento == 'pago' ||
-        statusPagamento == 'aprovado' ||
-        statusPagamento == 'paid' ||
-        statusPagamento == 'approved';
-  }
+  // ============================================================
+  // INFORMAÇÕES DOS PEDIDOS
+  // ============================================================
 
   String _tipoPedido(Map<String, dynamic> pedido) {
     final tipo = pedido['tipo']?.toString().toLowerCase() ?? '';
@@ -250,6 +347,7 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
     }
 
     if (tipo == 'retirada') return 'Retirada';
+
     if (tipo == 'delivery') return 'Delivery';
 
     return tipo.isEmpty ? 'Pedido' : tipo;
@@ -260,7 +358,7 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
         pedido['numero'] ?? pedido['codigo'] ?? pedido['numero_pedido'];
 
     if (numero != null && numero.toString().isNotEmpty) {
-      return '#${numero.toString()}';
+      return '#$numero';
     }
 
     final id = pedido['id']?.toString() ?? '';
@@ -288,37 +386,39 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
         pedido['pagamento_metodo'];
 
     if (valor == null || valor.toString().trim().isEmpty) {
-      return 'Pago';
+      return 'Pagamento registrado';
     }
 
     switch (valor.toString().toLowerCase()) {
       case 'pix':
         return 'Pix';
+
       case 'dinheiro':
         return 'Dinheiro';
+
       case 'cartao_credito':
         return 'Crédito';
+
       case 'cartao_debito':
         return 'Débito';
+
       case 'vale_refeicao':
         return 'Vale-refeição';
+
       case 'no_local':
         return 'No local';
+
+      case 'na_entrega':
+        return 'Na entrega';
+
       default:
         return valor.toString();
     }
   }
 
-  String _formatarData(DateTime data) {
-    return '${data.day.toString().padLeft(2, '0')}/'
-        '${data.month.toString().padLeft(2, '0')}/'
-        '${data.year}';
-  }
-
-  String _formatarHora(DateTime data) {
-    return '${data.hour.toString().padLeft(2, '0')}:'
-        '${data.minute.toString().padLeft(2, '0')}';
-  }
+  // ============================================================
+  // HISTÓRICO DE FATURAMENTO
+  // ============================================================
 
   Future<List<Map<String, dynamic>>> _buscarHistorico() async {
     final lista = await _pedidoRepository.listarPedidos();
@@ -327,13 +427,17 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
 
     for (final item in lista) {
       final pedido = Map<String, dynamic>.from(item);
-      final data = _dataPedido(pedido);
 
-      if (data == null || !_estaNoPeriodo(data)) {
+      // Faturamento considera pedidos concluídos.
+      final status = pedido['status']?.toString().toLowerCase() ?? '';
+
+      if (status != 'concluido') {
         continue;
       }
 
-      if (!_pedidoPago(pedido)) {
+      final data = _dataPedido(pedido);
+
+      if (data == null || !_estaNoPeriodo(data)) {
         continue;
       }
 
@@ -341,8 +445,10 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
     }
 
     historico.sort((a, b) {
-      final dataA = _dataPedido(a) ?? DateTime(2000);
-      final dataB = _dataPedido(b) ?? DateTime(2000);
+      final dataA = _dataPedido(a) ?? DateTime.utc(2000);
+
+      final dataB = _dataPedido(b) ?? DateTime.utc(2000);
+
       return dataB.compareTo(dataA);
     });
 
@@ -438,7 +544,9 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
             ),
           ),
         ),
+
         const SizedBox(height: 20),
+
         Row(
           children: [
             Container(
@@ -450,7 +558,9 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
               ),
               child: const Icon(Icons.receipt_long, color: Colors.green),
             ),
+
             const SizedBox(width: 12),
+
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -466,13 +576,18 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
                 ],
               ),
             ),
+
             IconButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                Navigator.pop(context);
+              },
               icon: const Icon(Icons.close),
             ),
           ],
         ),
+
         const SizedBox(height: 18),
+
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
@@ -501,11 +616,14 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
             ],
           ),
         ),
+
         const SizedBox(height: 8),
+
         Text(
-          '${pedidos.length} pedido(s) pago(s) encontrado(s)',
+          '${pedidos.length} pedido(s) concluído(s) encontrado(s)',
           style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
         ),
+
         if ((totalHistorico - faturamento).abs() > 0.01 &&
             pedidos.isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -519,7 +637,9 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
             ),
           ),
         ],
+
         const SizedBox(height: 20),
+
         if (pedidos.isEmpty)
           Container(
             padding: const EdgeInsets.all(30),
@@ -536,7 +656,7 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  'Nenhum pedido pago encontrado neste período.',
+                  'Nenhum pedido concluído encontrado neste período.',
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -553,10 +673,13 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
 
     for (final pedido in pedidos) {
       final data = _dataPedido(pedido);
+
       if (data == null) continue;
 
       final chave = _formatarData(data);
+
       grupos.putIfAbsent(chave, () => []);
+
       grupos[chave]!.add(pedido);
     }
 
@@ -595,7 +718,9 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
       );
 
       for (final pedido in entry.value) {
-        final data = _dataPedido(pedido)!;
+        final data = _dataPedido(pedido);
+
+        if (data == null) continue;
 
         widgets.add(
           Container(
@@ -620,7 +745,9 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
                     color: Colors.green,
                   ),
                 ),
+
                 const SizedBox(width: 12),
+
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -642,7 +769,9 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
                     ],
                   ),
                 ),
+
                 const SizedBox(width: 10),
+
                 Text(
                   _formatarDinheiro(_totalPedido(pedido)),
                   style: const TextStyle(
@@ -660,6 +789,10 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
     return widgets;
   }
 
+  // ============================================================
+  // INTERFACE PRINCIPAL
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -667,6 +800,7 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
       body: SafeArea(
         child: Column(
           children: [
+            // CABEÇALHO
             Container(
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
@@ -687,6 +821,7 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
                       Navigator.pop(context);
                     },
                   ),
+
                   const Expanded(
                     child: Text(
                       'Relatórios',
@@ -698,6 +833,7 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
                       ),
                     ),
                   ),
+
                   IconButton(
                     tooltip: 'Atualizar',
                     onPressed: () {
@@ -712,7 +848,10 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
                 ],
               ),
             ),
+
             const SizedBox(height: 20),
+
+            // FILTROS
             SizedBox(
               height: 45,
               child: ListView.builder(
@@ -749,7 +888,9 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
                 },
               ),
             ),
+
             const SizedBox(height: 10),
+
             Expanded(
               child: RefreshIndicator(
                 color: Colors.green,
@@ -764,6 +905,10 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
       ),
     );
   }
+
+  // ============================================================
+  // CONTEÚDO DOS RELATÓRIOS
+  // ============================================================
 
   Widget _conteudo() {
     if (carregando) {
@@ -807,6 +952,7 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(20),
       children: [
+        // FATURAMENTO E PEDIDOS
         Row(
           children: [
             _cardIndicador(
@@ -816,7 +962,9 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
               onTap: _abrirHistoricoFaturamento,
               mostrarSeta: true,
             ),
+
             const SizedBox(width: 15),
+
             _cardIndicador(
               Icons.receipt_long,
               'Pedidos',
@@ -824,9 +972,14 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
             ),
           ],
         ),
+
         const SizedBox(height: 15),
+
+        // PRODUTO MAIS PEDIDO
         _cardProdutoMaisPedido(),
+
         const SizedBox(height: 30),
+
         const Align(
           alignment: Alignment.centerLeft,
           child: Text(
@@ -834,7 +987,9 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
         ),
+
         const SizedBox(height: 15),
+
         if (produtos.isEmpty)
           Container(
             width: double.infinity,
@@ -859,9 +1014,12 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
               ],
             ),
           ),
+
+        // LISTAGEM DE PRODUTOS
         ...produtos.asMap().entries.map((entry) {
           final index = entry.key;
           final produto = entry.value;
+
           final quantidade = _quantidadeProduto(produto);
 
           return Card(
@@ -899,10 +1057,15 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
             ),
           );
         }),
+
         const SizedBox(height: 30),
       ],
     );
   }
+
+  // ============================================================
+  // CARD DOS INDICADORES
+  // ============================================================
 
   Widget _cardIndicador(
     IconData icon,
@@ -930,12 +1093,16 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(icon, color: Colors.green, size: 35),
+
                       const SizedBox(height: 8),
+
                       Text(
                         titulo,
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
+
                       const SizedBox(height: 3),
+
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 5),
                         child: FittedBox(
@@ -953,6 +1120,7 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
                     ],
                   ),
                 ),
+
                 if (mostrarSeta)
                   const Positioned(
                     right: 10,
@@ -967,6 +1135,10 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
     );
   }
 
+  // ============================================================
+  // CARD DO PRODUTO MAIS PEDIDO
+  // ============================================================
+
   Widget _cardProdutoMaisPedido() {
     return Container(
       width: double.infinity,
@@ -979,7 +1151,9 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Mais pedido', style: TextStyle(color: Colors.white70)),
+
           const SizedBox(height: 10),
+
           Text(
             produtoMaisPedido,
             style: const TextStyle(
@@ -988,6 +1162,7 @@ class _RelatorioGerenteTelaState extends State<RelatorioGerenteTela> {
               fontWeight: FontWeight.bold,
             ),
           ),
+
           if (produtos.isNotEmpty) ...[
             const SizedBox(height: 5),
             Text(

@@ -1,3 +1,5 @@
+import '../api_config.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -19,7 +21,7 @@ class _EsqueciSenhaTelaState extends State<EsqueciSenhaTela> {
   bool emailEnviado = false;
 
   // ============================================================
-  // SOLICITAR RECUPERAÇÃO DE SENHA
+  // SOLICITAR RECUPERAÃ‡ÃƒO DE SENHA
   // ============================================================
 
   Future<void> enviarRecuperacao() async {
@@ -28,7 +30,7 @@ class _EsqueciSenhaTelaState extends State<EsqueciSenhaTela> {
     final email = emailController.text.trim().toLowerCase();
 
     if (email.isEmpty || !email.contains('@')) {
-      _mostrarMensagem('Informe um e-mail válido.');
+      _mostrarMensagem('Informe um e-mail vÃ¡lido.');
       return;
     }
 
@@ -39,7 +41,7 @@ class _EsqueciSenhaTelaState extends State<EsqueciSenhaTela> {
     try {
       final resposta = await http
           .post(
-            Uri.parse('http://localhost:3000/api/auth/esqueci-senha'),
+            Uri.parse('${ApiConfig.baseUrl}/api/auth/esqueci-senha'),
             headers: {
               'Content-Type': 'application/json; charset=UTF-8',
               'Accept': 'application/json',
@@ -58,7 +60,7 @@ class _EsqueciSenhaTelaState extends State<EsqueciSenhaTela> {
         _mostrarMensagem('Muitas tentativas. Aguarde alguns minutos.');
       } else {
         _mostrarMensagem(
-          'Não foi possível processar a solicitação. '
+          'NÃ£o foi possÃ­vel processar a solicitaÃ§Ã£o. '
           'Tente novamente.',
         );
       }
@@ -66,8 +68,8 @@ class _EsqueciSenhaTelaState extends State<EsqueciSenhaTela> {
       if (!mounted) return;
 
       _mostrarMensagem(
-        'Não foi possível conectar ao servidor. '
-        'Verifique se o backend está ligado.',
+        'NÃ£o foi possÃ­vel conectar ao servidor. '
+        'Verifique se o backend estÃ¡ ligado.',
       );
     } finally {
       if (mounted) {
@@ -141,7 +143,7 @@ class _EsqueciSenhaTelaState extends State<EsqueciSenhaTela> {
   }
 
   // ============================================================
-  // FORMULÁRIO
+  // FORMULÃRIO
   // ============================================================
 
   Widget _formulario() {
@@ -167,7 +169,7 @@ class _EsqueciSenhaTelaState extends State<EsqueciSenhaTela> {
 
         const Text(
           'Informe o e-mail cadastrado no SaborExpress. '
-          'Enviaremos um link para você criar uma nova senha.',
+          'Enviaremos um link para vocÃª criar uma nova senha.',
           textAlign: TextAlign.center,
           style: TextStyle(color: AppColors.mutedText, height: 1.5),
         ),
@@ -211,7 +213,7 @@ class _EsqueciSenhaTelaState extends State<EsqueciSenhaTela> {
                     ),
                   )
                 : const Text(
-                    'Enviar link de recuperação',
+                    'Enviar link de recuperaÃ§Ã£o',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
           ),
@@ -228,7 +230,7 @@ class _EsqueciSenhaTelaState extends State<EsqueciSenhaTela> {
   }
 
   // ============================================================
-  // CONFIRMAÇÃO
+  // CONFIRMAÃ‡ÃƒO
   // ============================================================
 
   Widget _conteudoEnviado() {
@@ -257,8 +259,8 @@ class _EsqueciSenhaTelaState extends State<EsqueciSenhaTela> {
 
         const Text(
           'Se o e-mail informado estiver cadastrado, '
-          'você receberá um link para redefinir sua senha.\n\n'
-          'Verifique também a pasta de spam.',
+          'vocÃª receberÃ¡ um link para redefinir sua senha.\n\n'
+          'Verifique tambÃ©m a pasta de spam.',
           textAlign: TextAlign.center,
           style: TextStyle(color: AppColors.mutedText, height: 1.5),
         ),

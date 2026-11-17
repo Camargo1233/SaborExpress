@@ -1,11 +1,13 @@
+import '../api_config.dart';
+
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class MesaRepository {
-  static const String baseUrl =
-      'http://localhost:3000/api/restaurantes/sabor-express';
+  static final String baseUrl =
+      '${ApiConfig.baseUrl}/api/restaurantes/sabor-express';
 
   // ============================================================
   // TOKEN
@@ -17,7 +19,7 @@ class MesaRepository {
     final token = prefs.getString('token');
 
     if (token == null || token.isEmpty) {
-      throw Exception('Sessão não encontrada. Faça login novamente.');
+      throw Exception('SessÃ£o nÃ£o encontrada. FaÃ§a login novamente.');
     }
 
     return token;
@@ -61,7 +63,7 @@ class MesaRepository {
   }
 
   // ============================================================
-  // CLIENTE - LISTAR MESAS DISPONÍVEIS
+  // CLIENTE - LISTAR MESAS DISPONÃVEIS
   // ============================================================
 
   Future<List<Map<String, dynamic>>> listarMesasDisponiveis() async {
@@ -74,7 +76,7 @@ class MesaRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível carregar as mesas: '
+        'NÃ£o foi possÃ­vel carregar as mesas: '
         '${_mensagemErro(response)}',
       );
     }
@@ -82,7 +84,7 @@ class MesaRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! List) {
-      throw Exception('Formato de resposta das mesas inválido.');
+      throw Exception('Formato de resposta das mesas invÃ¡lido.');
     }
 
     return dados.map((mesa) => Map<String, dynamic>.from(mesa)).toList();
@@ -112,7 +114,7 @@ class MesaRepository {
 
     if (response.statusCode != 201) {
       throw Exception(
-        'Não foi possível reservar a mesa: '
+        'NÃ£o foi possÃ­vel reservar a mesa: '
         '${_mensagemErro(response)}',
       );
     }
@@ -120,7 +122,7 @@ class MesaRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map<String, dynamic>) {
-      throw Exception('Resposta inválida ao reservar a mesa.');
+      throw Exception('Resposta invÃ¡lida ao reservar a mesa.');
     }
 
     return dados;
@@ -140,7 +142,7 @@ class MesaRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível carregar as mesas: '
+        'NÃ£o foi possÃ­vel carregar as mesas: '
         '${_mensagemErro(response)}',
       );
     }
@@ -148,7 +150,7 @@ class MesaRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! List) {
-      throw Exception('Formato de resposta das mesas inválido.');
+      throw Exception('Formato de resposta das mesas invÃ¡lido.');
     }
 
     return dados.map((mesa) => Map<String, dynamic>.from(mesa)).toList();
@@ -178,7 +180,7 @@ class MesaRepository {
 
     if (response.statusCode != 201) {
       throw Exception(
-        'Não foi possível ocupar a mesa: '
+        'NÃ£o foi possÃ­vel ocupar a mesa: '
         '${_mensagemErro(response)}',
       );
     }
@@ -186,7 +188,7 @@ class MesaRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map<String, dynamic>) {
-      throw Exception('Resposta inválida ao abrir a mesa.');
+      throw Exception('Resposta invÃ¡lida ao abrir a mesa.');
     }
 
     return dados;
@@ -206,7 +208,7 @@ class MesaRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível carregar a comanda: '
+        'NÃ£o foi possÃ­vel carregar a comanda: '
         '${_mensagemErro(response)}',
       );
     }
@@ -214,14 +216,14 @@ class MesaRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map<String, dynamic>) {
-      throw Exception('Resposta inválida da comanda.');
+      throw Exception('Resposta invÃ¡lida da comanda.');
     }
 
     return dados;
   }
 
   // ============================================================
-  // TAXA DE SERVIÇO
+  // TAXA DE SERVIÃ‡O
   // ============================================================
 
   Future<Map<String, dynamic>> definirServico({
@@ -238,7 +240,7 @@ class MesaRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível alterar a taxa de serviço: '
+        'NÃ£o foi possÃ­vel alterar a taxa de serviÃ§o: '
         '${_mensagemErro(response)}',
       );
     }
@@ -246,7 +248,7 @@ class MesaRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map<String, dynamic>) {
-      throw Exception('Resposta inválida ao alterar a taxa de serviço.');
+      throw Exception('Resposta invÃ¡lida ao alterar a taxa de serviÃ§o.');
     }
 
     return dados;
@@ -266,7 +268,7 @@ class MesaRepository {
 
     if (response.statusCode != 200) {
       throw Exception(
-        'Não foi possível fechar a comanda: '
+        'NÃ£o foi possÃ­vel fechar a comanda: '
         '${_mensagemErro(response)}',
       );
     }
@@ -274,7 +276,7 @@ class MesaRepository {
     final dynamic dados = jsonDecode(response.body);
 
     if (dados is! Map<String, dynamic>) {
-      throw Exception('Resposta inválida ao fechar a comanda.');
+      throw Exception('Resposta invÃ¡lida ao fechar a comanda.');
     }
 
     return dados;

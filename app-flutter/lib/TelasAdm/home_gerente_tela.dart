@@ -1,9 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../Repositories/relatorio_repository.dart';
-import '../Repositories/pedido_repository.dart';
-import '../Repositories/mesa_repository.dart';
 
 class HomeGerenteTela extends StatefulWidget {
   const HomeGerenteTela({super.key});
@@ -14,12 +14,17 @@ class HomeGerenteTela extends StatefulWidget {
 
 class _HomeGerenteTelaState extends State<HomeGerenteTela> {
   final RelatorioRepository _relatorioRepository = RelatorioRepository();
-  final PedidoRepository _pedidoRepository = PedidoRepository();
-  final MesaRepository _mesaRepository = MesaRepository();
 
   bool carregando = true;
   String? erro;
 
+  // Controle do carregamento do dashboard
+  bool _buscandoDashboard = false;
+  bool _carregouDashboard = false;
+  DateTime? _bloqueadoAte;
+  Timer? _timerDashboard;
+
+  // Indicadores do painel
   int pedidosHoje = 0;
   double faturamentoHoje = 0;
   String maisVendido = 'Sem vendas';
@@ -27,25 +32,19 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
   int mesasOcupadas = 0;
   int totalMesas = 0;
 
-  List<Map<String, dynamic>> atividadesRecentes = [];
-
-  // ============================================================
-  // CONTROLE DE REQUISIÇÕES
-  // ============================================================
-
-  bool _buscandoDashboard = false;
-  bool _carregouDashboard = false;
-
-  DateTime? _bloqueadoAte;
-
-  List<Map<String, dynamic>> _atividadesMesasCache = [];
-  List<Map<String, dynamic>> _pedidosCache = [];
-  List<Map<String, dynamic>> _mesasCache = [];
-
   @override
   void initState() {
     super.initState();
     carregarDashboard();
+    _timerDashboard = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) carregarDashboard();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timerDashboard?.cancel();
+    super.dispose();
   }
 
   bool _erroDeLimite(Object e) {
@@ -85,14 +84,10 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
     });
 
     String? aviso;
-    bool limiteAtingido = false;
-
     void registrarErro(Object e) {
       debugPrint('Falha ao atualizar painel do gerente: $e');
 
       if (_erroDeLimite(e)) {
-        limiteAtingido = true;
-
         _bloqueadoAte = DateTime.now().add(const Duration(seconds: 60));
 
         aviso =
@@ -129,9 +124,13 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
 
           if (maisVendidoDados is Map) {
             maisVendido =
-                maisVendidoDados['produto_nome']?.toString() ?? 'Sem vendas';
+                maisVendidoDados['nome']?.toString() ??
+                maisVendidoDados['produto_nome']?.toString() ??
+                'Sem vendas';
 
-            unidadesMaisVendido = _paraInt(maisVendidoDados['unidades']);
+            unidadesMaisVendido = _paraInt(
+              maisVendidoDados['unidades'] ?? maisVendidoDados['quantidade'],
+            );
           } else {
             maisVendido = 'Sem vendas';
             unidadesMaisVendido = 0;
@@ -143,67 +142,8 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
         registrarErro(e);
       }
 
-      // ========================================================
-      // 2. ATIVIDADES RECENTES DAS MESAS
-      // ========================================================
-
-      if (!limiteAtingido) {
-        try {
-          _atividadesMesasCache =
-              (await _relatorioRepository.buscarAtividadesRecentes())
-                  .whereType<Map>()
-                  .map((item) => Map<String, dynamic>.from(item))
-                  .toList();
-        } catch (e) {
-          registrarErro(e);
-        }
-      }
-
-      // ========================================================
-      // 3. PEDIDOS DE MESA, RETIRADA E DELIVERY
-      // ========================================================
-
-      if (!limiteAtingido) {
-        try {
-          _pedidosCache = (await _pedidoRepository.listarPedidos())
-              .whereType<Map>()
-              .map((item) => Map<String, dynamic>.from(item))
-              .toList();
-        } catch (e) {
-          registrarErro(e);
-        }
-      }
-
-      // ========================================================
-      // 4. MESAS
-      // ========================================================
-
-      if (!limiteAtingido) {
-        try {
-          _mesasCache = (await _mesaRepository.listarMesas())
-              .whereType<Map>()
-              .map((item) => Map<String, dynamic>.from(item))
-              .toList();
-        } catch (e) {
-          registrarErro(e);
-        }
-      }
-
-      // ========================================================
-      // ATUALIZAR ATIVIDADES COM DADOS DISPONÍVEIS
-      // ========================================================
-
       if (!mounted) return;
-
-      setState(() {
-        atividadesRecentes = _montarAtividadesRecentes(
-          _atividadesMesasCache,
-          _pedidosCache,
-          _mesasCache,
-        );
-
-        erro = aviso;
-      });
+      setState(() => erro = aviso);
     } finally {
       _buscandoDashboard = false;
 
@@ -214,211 +154,6 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
       }
     }
   }
-
-  // ============================================================
-  // ATIVIDADES RECENTES - MESAS + RETIRADA + DELIVERY
-  // ============================================================
-
-  List<Map<String, dynamic>> _montarAtividadesRecentes(
-    List<Map<String, dynamic>> atividadesMesas,
-    List<Map<String, dynamic>> pedidos,
-    List<Map<String, dynamic>> mesas,
-  ) {
-    final atividades = <Map<String, dynamic>>[];
-    final sessoesMesaJaListadas = <String>{};
-
-    // Atividades de abertura e fechamento de mesa.
-    for (final atividade in atividadesMesas) {
-      final item = Map<String, dynamic>.from(atividade);
-
-      item['_origem'] = 'mesa';
-      item['_data_atividade'] = _dataAtividade(item);
-
-      final sessaoId =
-          (item['sessao_id'] ?? item['sessao_mesa_id'] ?? item['id'])
-              ?.toString();
-
-      if (sessaoId != null && sessaoId.isNotEmpty) {
-        sessoesMesaJaListadas.add(sessaoId);
-      }
-
-      atividades.add(item);
-    }
-
-    // Pedidos de mesa, retirada e delivery.
-    // A forma de pagamento não interfere na listagem.
-    for (final pedido in pedidos) {
-      final tipo = pedido['tipo']?.toString().toLowerCase() ?? '';
-
-      if (tipo != 'mesa' && tipo != 'retirada' && tipo != 'delivery') {
-        continue;
-      }
-
-      final item = Map<String, dynamic>.from(pedido);
-
-      item['_origem'] = tipo;
-      item['_atividade_pedido'] = true;
-      item['_data_atividade'] = _dataAtividade(item);
-
-      atividades.add(item);
-    }
-
-    // Inclui mesas ocupadas que ainda não apareceram
-    // nas atividades devolvidas pelo backend.
-    for (final mesa in mesas) {
-      final status = mesa['status']?.toString().toLowerCase() ?? '';
-
-      final sessaoId = (mesa['sessao_id'] ?? mesa['sessao_mesa_id'])
-          ?.toString();
-
-      final ocupada =
-          status == 'ocupada' ||
-          status == 'reservada' ||
-          (sessaoId != null && sessaoId.isNotEmpty);
-
-      if (!ocupada) continue;
-
-      if (sessaoId != null &&
-          sessaoId.isNotEmpty &&
-          sessoesMesaJaListadas.contains(sessaoId)) {
-        continue;
-      }
-
-      final item = <String, dynamic>{
-        ...mesa,
-        '_origem': 'mesa',
-        '_mesa_atual': true,
-        'tipo': 'aberta',
-        'mesa_numero': mesa['numero'] ?? mesa['mesa_numero'],
-        'sessao_id': sessaoId,
-      };
-
-      item['_data_atividade'] = _dataAtividade(item);
-
-      atividades.add(item);
-    }
-
-    // Ordena as atividades da mais recente para a antiga.
-    atividades.sort((a, b) {
-      final dataA = a['_data_atividade'] as DateTime?;
-
-      final dataB = b['_data_atividade'] as DateTime?;
-
-      if (dataA == null && dataB == null) return 0;
-      if (dataA == null) return 1;
-      if (dataB == null) return -1;
-
-      return dataB.compareTo(dataA);
-    });
-
-    return atividades.take(30).toList();
-  }
-
-  // ============================================================
-  // DATA DA ATIVIDADE
-  // ============================================================
-
-  DateTime? _dataAtividade(Map<String, dynamic> item) {
-    final valor =
-        item['atualizado_em'] ??
-        item['updated_at'] ??
-        item['criado_em'] ??
-        item['created_at'] ??
-        item['confirmado_em'] ??
-        item['fechado_em'] ??
-        item['aberta_em'] ??
-        item['aberto_em'] ??
-        item['iniciada_em'] ??
-        item['data_hora'] ??
-        item['data'];
-
-    if (valor == null) return null;
-
-    return DateTime.tryParse(valor.toString())?.toLocal();
-  }
-
-  // ============================================================
-  // STATUS DO PEDIDO
-  // ============================================================
-
-  String _statusPedido(Map<String, dynamic> pedido) {
-    return (pedido['status'] ?? '').toString().toLowerCase();
-  }
-
-  String _textoStatus(String status) {
-    switch (status) {
-      case 'rascunho':
-        return 'Aguardando confirmação';
-
-      case 'confirmado':
-        return 'Pedido confirmado';
-
-      case 'em_preparo':
-        return 'Em preparo';
-
-      case 'pronto':
-        return 'Pronto';
-
-      case 'em_entrega':
-        return 'Saiu para entrega';
-
-      case 'concluido':
-        return 'Concluído';
-
-      case 'cancelado':
-        return 'Cancelado';
-
-      default:
-        return status.isEmpty ? 'Pedido atualizado' : status;
-    }
-  }
-
-  // ============================================================
-  // NÚMERO DO PEDIDO
-  // ============================================================
-
-  String _numeroPedido(Map<String, dynamic> pedido) {
-    final codigo = pedido['codigo']?.toString().trim() ?? '';
-
-    if (codigo.isNotEmpty) return codigo;
-
-    final numero = pedido['numero_pedido'] ?? pedido['numero'];
-
-    if (numero != null && numero.toString().trim().isNotEmpty) {
-      return numero.toString();
-    }
-
-    final id = pedido['id']?.toString() ?? '';
-
-    return id.length > 8 ? id.substring(0, 8) : id;
-  }
-
-  // ============================================================
-  // HORÁRIO DAS ATIVIDADES
-  // ============================================================
-
-  String _formatarHorarioAtividade(DateTime? data) {
-    if (data == null) return '';
-
-    final agora = DateTime.now();
-
-    final hoje = DateTime(agora.year, agora.month, agora.day);
-
-    final dia = DateTime(data.year, data.month, data.day);
-
-    final hora =
-        '${data.hour.toString().padLeft(2, '0')}:'
-        '${data.minute.toString().padLeft(2, '0')}';
-
-    if (dia == hoje) {
-      return 'Hoje às $hora';
-    }
-
-    return '${data.day.toString().padLeft(2, '0')}/'
-        '${data.month.toString().padLeft(2, '0')} às $hora';
-  }
-
-  // A PARTE 2 CONTINUA AQUI
 
   // ============================================================
   // CONVERSÕES
@@ -718,8 +453,8 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
                                 ? '...'
                                 : maisVendido,
                             subtitulo: unidadesMaisVendido > 0
-                                ? '$unidadesMaisVendido vendidos na semana'
-                                : 'Últimos 7 dias',
+                                ? '$unidadesMaisVendido vendidos hoje'
+                                : 'Nenhuma venda hoje',
                             corPrincipal: const Color(0xFF079447),
                             corFundo: const Color(0xFFDDF3E3),
                           ),
@@ -777,31 +512,7 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
                         const Color(0xFFFFF3D8),
                       ),
 
-                      const SizedBox(height: 35),
-
-                      // ========================================
-                      // ATIVIDADES RECENTES
-                      // ========================================
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Atividades recentes',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 15),
-
-                      if (!carregando && atividadesRecentes.isEmpty)
-                        _nenhumaAtividade(),
-
-                      if (!carregando)
-                        ...atividadesRecentes.map(
-                          (atividade) => _cardAtividade(atividade),
-                        ),
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
@@ -1093,268 +804,6 @@ class _HomeGerenteTelaState extends State<HomeGerenteTela> {
             Icon(Icons.chevron_right_rounded, color: cor, size: 27),
           ],
         ),
-      ),
-    );
-  }
-
-  // A PARTE 3 CONTINUA AQUI
-
-  // ============================================================
-  // CARD DE ATIVIDADE
-  // ============================================================
-
-  Widget _cardAtividade(Map<String, dynamic> atividade) {
-    final origem = atividade['_origem']?.toString().toLowerCase() ?? 'mesa';
-
-    final data =
-        atividade['_data_atividade'] as DateTime? ?? _dataAtividade(atividade);
-
-    final atividadePedido = atividade['_atividade_pedido'] == true;
-
-    // ==========================================================
-    // ATIVIDADES DE PEDIDOS
-    // MESA, RETIRADA E DELIVERY
-    // ==========================================================
-
-    if (atividadePedido || origem == 'retirada' || origem == 'delivery') {
-      final status = _statusPedido(atividade);
-      final numero = _numeroPedido(atividade);
-
-      final valor = _paraDouble(
-        atividade['total'] ??
-            atividade['valor_total'] ??
-            atividade['total_final'] ??
-            atividade['valor'],
-      );
-
-      final bool retirada = origem == 'retirada';
-      final bool delivery = origem == 'delivery';
-      final bool mesaPedido = origem == 'mesa';
-
-      Color cor;
-      IconData icone;
-
-      // ========================================================
-      // COR E ÍCONE DO STATUS
-      // ========================================================
-
-      if (status == 'cancelado') {
-        cor = Colors.red;
-        icone = Icons.cancel_outlined;
-      } else if (status == 'concluido') {
-        cor = Colors.green;
-        icone = Icons.check_circle;
-      } else if (status == 'pronto') {
-        cor = Colors.blue;
-        icone = Icons.done_all;
-      } else if (status == 'em_entrega') {
-        cor = Colors.blue;
-        icone = Icons.delivery_dining;
-      } else if (status == 'em_preparo') {
-        cor = Colors.orange;
-        icone = Icons.restaurant;
-      } else {
-        cor = Colors.orange;
-
-        icone = retirada
-            ? Icons.shopping_bag_outlined
-            : delivery
-            ? Icons.delivery_dining
-            : Icons.table_restaurant;
-      }
-
-      // ========================================================
-      // IDENTIFICAR O TIPO DO PEDIDO
-      // ========================================================
-
-      String tituloTipo;
-
-      if (retirada) {
-        tituloTipo = 'Retirada';
-      } else if (delivery) {
-        tituloTipo = 'Delivery';
-      } else if (mesaPedido) {
-        final numeroMesa =
-            atividade['mesa_numero'] ??
-            atividade['numero_mesa'] ??
-            atividade['mesa'];
-
-        tituloTipo = numeroMesa != null ? 'Mesa $numeroMesa' : 'Pedido da mesa';
-      } else {
-        tituloTipo = 'Pedido';
-      }
-
-      // ========================================================
-      // TÍTULO DA ATIVIDADE
-      // ========================================================
-
-      final titulo = numero.isEmpty
-          ? '$tituloTipo - ${_textoStatus(status)}'
-          : '$tituloTipo - Pedido $numero - ${_textoStatus(status)}';
-
-      // ========================================================
-      // DESCRIÇÃO
-      // ========================================================
-
-      final horario = _formatarHorarioAtividade(data);
-
-      final partes = <String>[
-        if (valor > 0) _formatarDinheiro(valor),
-        if (horario.isNotEmpty) horario,
-      ];
-
-      return _atividadeContainer(
-        cor: cor,
-        icone: icone,
-        titulo: titulo,
-        descricao: partes.isEmpty ? 'Pedido atualizado' : partes.join(' • '),
-      );
-    }
-
-    // ==========================================================
-    // ATIVIDADES DE ABERTURA E FECHAMENTO DE MESAS
-    // ==========================================================
-
-    final tipo = atividade['tipo']?.toString().toLowerCase() ?? '';
-
-    final numeroMesa =
-        atividade['mesa_numero']?.toString() ??
-        atividade['numero']?.toString() ??
-        '';
-
-    final valor = _paraDouble(atividade['valor']);
-
-    final bool fechada = tipo == 'fechada';
-
-    final Color cor = fechada ? Colors.green : Colors.orange;
-
-    final IconData icone = fechada
-        ? Icons.check_circle
-        : Icons.table_restaurant;
-
-    final String titulo = fechada
-        ? 'Mesa $numeroMesa - Pedido fechado'
-        : 'Mesa $numeroMesa foi reservada';
-
-    final horario = _formatarHorarioAtividade(data);
-
-    final String descricao = fechada
-        ? [
-            _formatarDinheiro(valor),
-            if (horario.isNotEmpty) horario,
-          ].join(' • ')
-        : ['Conta em andamento', if (horario.isNotEmpty) horario].join(' • ');
-
-    return _atividadeContainer(
-      cor: cor,
-      icone: icone,
-      titulo: titulo,
-      descricao: descricao,
-    );
-  }
-
-  // ============================================================
-  // DESIGN DO CARD DE ATIVIDADE
-  // ============================================================
-
-  Widget _atividadeContainer({
-    required Color cor,
-    required IconData icone,
-    required String titulo,
-    required String descricao,
-  }) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: cor.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: cor.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        children: [
-          // ====================================================
-          // ÍCONE DA ATIVIDADE
-          // ====================================================
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: cor.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icone, color: cor),
-          ),
-
-          const SizedBox(width: 14),
-
-          // ====================================================
-          // INFORMAÇÕES DA ATIVIDADE
-          // ====================================================
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  titulo,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                Text(
-                  descricao,
-                  style: TextStyle(color: cor, fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-          ),
-
-          Icon(Icons.chevron_right, color: Colors.grey.shade400),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // NENHUMA ATIVIDADE RECENTE
-  // ============================================================
-
-  Widget _nenhumaAtividade() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Column(
-        children: [
-          Icon(Icons.notifications_none, size: 40, color: Colors.grey.shade500),
-
-          const SizedBox(height: 10),
-
-          Text(
-            'Nenhuma atividade recente',
-            style: TextStyle(
-              color: Colors.grey.shade700,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(height: 4),
-
-          Text(
-            'As movimentações de mesas, retiradas '
-            'e deliveries aparecerão aqui.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-          ),
-        ],
       ),
     );
   }
